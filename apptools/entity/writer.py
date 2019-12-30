@@ -92,8 +92,7 @@ def _package(input: pathlib.Path, path: pathlib.Path,
 def _load_message(input: pathlib.Path, message: Element,
                   entities: EntitiesMap) -> Message:
     name = message.get("name").split(".")[0]
-    is_array = message.get("type") is not None and message.get(
-        "type") == 'array'
+    is_array = message.get("type") == "array"
     nullable = _is_message_nullable(message.get("subtype"))
 
     properties_raw: List[Element] = []
@@ -150,7 +149,7 @@ def _is_nullable(subtype: Optional[str], fallback: bool) -> bool:
     return fallback
 
 
-def _enum(subtype: Optional[str]) -> List[str]:
+def _enum(subtype: Optional[str]) -> Optional[List[str]]:
     if subtype is not None:
         for subtype_info in subtype.split(","):
             subtype_info_key = subtype_info.split("=")[0]
@@ -158,7 +157,7 @@ def _enum(subtype: Optional[str]) -> List[str]:
             if subtype_info_key == "enum":
                 return subtype_info_value.split(";")
 
-    return []
+    return None
 
 
 def _is_key(key: Optional[str]) -> bool:

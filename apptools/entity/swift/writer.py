@@ -77,7 +77,7 @@ def _write_datamodel_class(writer: IndentedWriter,
     writer.append(" {")
     writer.newline()
 
-    constructor_parameters = []
+    constructor_parameters: List[Tuple[str, str]] = []
 
     for property in message.properties:
         if property.method == "request":
@@ -100,57 +100,76 @@ def _write_datamodel_class(writer: IndentedWriter,
             constructor_parameters.append((name, type))
         indented_writer.newline()
 
-    for message in message.messages:
+    for sub_message in message.messages:
         indented_writer = writer.indented()
 
-        if message.is_array:
-            if message.extends is None or message.properties or message.name != message.extends.name:
-                _write_datamodel_class(indented_writer, message, prefix)
-                type = f"[{prefix}{message.name}]"
+        if sub_message.is_array:
+            if sub_message.extends is None or sub_message.properties or sub_message.name != sub_message.extends.name:
+                _write_datamodel_class(indented_writer, sub_message, prefix)
+                type = f"[{prefix}{sub_message.name}]"
             else:
-                type = f"[{message.extends.name}]"
-            name = camelcase(message.name)
+                type = f"[{sub_message.extends.name}]"
+            name = f"{camelcase(sub_message.name)}List"
         else:
-            if message.extends is None or message.properties or message.name != message.extends.name:
-                _write_datamodel_class(indented_writer, message, prefix)
-                type = prefix + message.name
+            if sub_message.extends is None or sub_message.properties or sub_message.name != sub_message.extends.name:
+                _write_datamodel_class(indented_writer, sub_message, prefix)
+                type = prefix + sub_message.name
             else:
-                type = message.extends.name
-            name = camelcase(message.name)
+                type = sub_message.extends.name
+            name = camelcase(sub_message.name)
 
         indented_writer.write(f"var {name}: {type}")
-        if message.nullable:
+        if sub_message.nullable:
             indented_writer.append("?")
         else:
             constructor_parameters.append((name, type))
         indented_writer.newline()
 
+    super_constructor_parameters = []
+    constructor_parameters_string = []
+
+    if message.extends is not None:
+        super_constructor_parameters = _get_constructor_parameters(
+            message.extends)
+
+        for construct_parameter in super_constructor_parameters:
+            constructor_parameters_string.append(
+                f"{construct_parameter[0]}: {construct_parameter[1]}")
+
+    for construct_parameter in constructor_parameters:
+        constructor_parameters_string.append(
+            f"{construct_parameter[0]}: {construct_parameter[1]}")
+
+    super_arguments_string: List[str] = []
+    for construct_parameter in super_constructor_parameters:
+        super_arguments_string.append(
+            f"{construct_parameter[0]}: {construct_parameter[0]}")
+
+    if constructor_parameters_string:
+        indented_writer = writer.indented()
+
+        indented_writer.newline()
+        override = ""
+        if not constructor_parameters:
+            override = "override "
+        indented_writer.writeln(
+            f"{override}init({', '.join(constructor_parameters_string)}) {{")
+
+        for constructor_parameter in constructor_parameters:
+            name = constructor_parameter[0]
+            indented_writer.indented().writeln(f"self.{name} = {name}")
+
+        if message.extends is not None:
+            indented_writer.newline()
+            indented_writer.indented().writeln(
+                f"super.init({', '.join(super_arguments_string)})")
+
+        indented_writer.writeln("}")
+    elif message.extends is None:
+        writer.newline()
+        writer.indented().writeln("init() { }")
+
     _write_coding(writer.indented(), message, prefix)
-
-    # indented_writer = writer.indented()
-    # if constructor_parameters:
-    #     indented_writer.newline()
-
-    #     if message.extends is not None:
-    #         _get_constructor_parameters(message.extends)
-
-    #     for parameter in constructor_parameters:
-
-    #     indented_writer.writeln("init() {")
-
-    #     for parameter in constructor_parameters:
-    #         indented_writer.indented().writeln(f"self.{parameter[0]} = {parameter[0]}")
-
-    #     if message.extends is not None:
-    #         indented_writer.indented().newline()
-    #         indented_writer.indented().writeln(f"super.init()")
-    #     indented_writer.writeln("}")
-    # elif message.extends is None:
-    #     if message.properties or message.messages:
-    #         indented_writer.newline()
-
-    #     indented_writer.writeln("init() { }")
-
     writer.writeln("}")
 
 
@@ -160,6 +179,7 @@ def _write_coding(writer: IndentedWriter,
     if message.messages or message.properties:
         writer.newline()
         writer.writeln("private enum CodingKeys: String, CodingKey {")
+
         for property in message.properties:
             if property.method == "request":
                 continue
@@ -218,18 +238,31 @@ def _write_decoding(writer: IndentedWriter,
         variable_name = _to_case(sub_message.name)
         variable_type = sub_message.name
 
+        if sub_message.is_array:
+            if sub_message.extends is None or sub_message.properties or sub_message.name != sub_message.extends.name:
+                variable_type = f"[{prefix}{sub_message.name}]"
+            else:
+                variable_type = f"[{sub_message.extends.name}]"
+            variable_name += "List"
+        else:
+            if sub_message.extends is None or sub_message.properties or sub_message.name != sub_message.extends.name:
+                variable_type = prefix + sub_message.name
+            else:
+                variable_type = sub_message.extends.name
+
         indented_writer.write(variable_name)
         indented_writer.append(" = try container.")
         if sub_message.nullable:
             indented_writer.append("decodeIfPresent")
         else:
             indented_writer.append("decode")
-        indented_writer.append(
+
+        indented_writer.appendln(
             f"({variable_type}.self, forKey: .{variable_name})")
 
     if message.extends is not None:
-        writer.newline()
-        writer.writeln("try super.init(from: decoder")
+        indented_writer.newline()
+        indented_writer.writeln("try super.init(from: decoder)")
 
     writer.writeln("}")
 
@@ -237,14 +270,38 @@ def _write_decoding(writer: IndentedWriter,
 def _write_encoding(writer: IndentedWriter,
                     message: Message,
                     prefix: str = '') -> None:
+    override = ""
     if message.extends is not None:
-        writer.append("override ")
-    writer.appendln("func encode(to encoder: Encoder) throws {")
+        override = "override "
+
+    writer.writeln(f"{override}func encode(to encoder: Encoder) throws {{")
+
+    indented_writer = writer.indented()
+
     if message.extends is not None:
-        writer.writeln("try super.encode(to: encoder)")
+        indented_writer.writeln("try super.encode(to: encoder)")
 
     if message.properties or message.messages:
-        pass
+        indented_writer.writeln(
+            f"var container = encoder.container(keyedBy: CodingKeys.self)")
+
+    for property in message.properties:
+        if property.method == "request":
+            continue
+
+        name = _variable_name(property.name)
+
+        indented_writer.writeln(
+            f"try container.encode({name}, forKey: .{name})")
+
+    for sub_message in message.messages:
+        name = _variable_name(sub_message.name)
+        if sub_message.is_array:
+            name += "List"
+
+        indented_writer.writeln(
+            f"try container.encode({name}, forKey: .{name})")
+
     writer.writeln("}")
 
 
@@ -293,7 +350,13 @@ def _write_enum(writer: IndentedWriter, property: Property,
     writer.writeln(
         f"enum {property.name}: String, Codable, CaseIterable, Comparable {{")
     for case in cases:
-        writer.indented().writeln(f'case {_to_case(case)} = "{case}"')
+        name = _to_case(case)
+        value = case
+
+        if name != value:
+            writer.indented().writeln(f'case {_to_case(case)} = "{case}"')
+        else:
+            writer.indented().writeln(f'case {_to_case(case)}')
 
     writer.newline()
     _write_enum_comparable(writer.indented(), property)

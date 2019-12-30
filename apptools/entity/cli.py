@@ -34,3 +34,6 @@ def main():
 
     # Call writer.
     sys.exit(write(args.writer, vars(args)))
+
+if __name__ == "__main__":
+    main()

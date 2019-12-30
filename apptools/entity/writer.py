@@ -22,7 +22,7 @@ def write(writer: Writer, options: Options) -> int:
 
     entities: EntitiesMap = {}
     for file in input.rglob("*.xml"):
-        if file.stem == "entitymapping":
+        if file.stem.endswith("entitymapping"):
             continue
 
         rpc = Rpc.make(username, password, file)
@@ -49,7 +49,7 @@ def _load(input: pathlib.Path, name: str, value: EntityValue,
         root_message = value.entity.find(f"message[@name='{name}.{version}']")
 
     if root_message is None:
-        raise NameError(f"Root message not found for input {input}")
+        raise NameError(f"Root message not found for input {name}")
 
     methods = [
         element.get("method") or "GET"

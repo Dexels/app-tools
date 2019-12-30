@@ -29,11 +29,13 @@ class Call(object):
         self.url = "http://localhost:9090/navajo/Generic"
 
     def execute(self) -> Element:
-        print(f"Requesting \"{self.rpc.name}\"")
+        print(f"Requesting \"{self.rpc.path}\"")
 
         request = urllib.request.Request(self.url, self.data.encode())
         opener = urllib.request.urlopen(request)
         response = opener.read().decode()
+
+        print(response)
 
         return XML(response)
 
@@ -45,6 +47,6 @@ class Call(object):
                     <transaction 
                         rpc_usr="{self.rpc.username}"
                         rpc_pwd="{self.rpc.password}"
-                        rpc_name="{self.rpc.path}" />
+                        rpc_name="{"/".join(self.rpc.path.parts)}" />
                 </header>
             </tml>'''

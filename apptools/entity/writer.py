@@ -1,134 +1,193 @@
 import pathlib
 import urllib.parse
+import xml.etree.ElementTree as ElementTree
 
-from typing import Callable, List, Any, NamedTuple, Dict, Optional
+from typing import Callable, List, Any, NamedTuple, Dict, Optional, Set, MutableMapping, Mapping
 from xml.etree.ElementTree import Element
 
 from apptools.entity.navajo import Entity, Message, Property
-from apptools.entity.request import Call, Rpc
+from apptools.entity.request import Network
 
 Options = Dict[str, Any]
 Writer = Callable[[List[Entity], Options], int]
 
-EntityValue = NamedTuple("EntityValue", [("path", pathlib.Path),
-                                         ("entity", Element)])
-EntitiesMap = Dict[str, EntityValue]
-
 
 def write(writer: Writer, options: Options) -> int:
+    input: pathlib.Path = options["input"]
     username: str = options["username"]
     password: str = options["password"]
-    input: pathlib.Path = options["input"]
 
-    entities: EntitiesMap = {}
-    for file in input.rglob("*.xml"):
-        if file.stem.endswith("entitymapping"):
-            continue
+    paths = _entity_mappings_paths(input)
+    mappings = _fetch(paths, username, password)
+    entities = _entities(input, mappings)
 
-        rpc = Rpc.make(username, password, file)
-        entity = Call(rpc).execute()
+    return writer(entities, options)
 
-        entities[rpc.name] = EntityValue(rpc.path, entity)
 
-    print(f"Requested {len(entities)} entities")
+def _entity_mappings_paths(path: pathlib.Path) -> Set[pathlib.Path]:
+    paths: Set[pathlib.Path] = set()
+    for file in path.rglob("*entitymapping.xml"):
+        print(f"Parsing entity mapping: {file}")
 
-    loaded_entities = [
-        _load(input, name, value, entities)
-        for name, value in entities.items()
+        parsed = ElementTree.parse(str(file))
+        for property in parsed.findall(".//property[@name='entity']"):
+            value = property.get("value")
+            if value is not None:
+                path = pathlib.Path("entity", value)
+                paths.add(path)
+
+    return paths
+
+
+def _fetch(paths: Set[pathlib.Path], username: str,
+           password: str) -> Mapping[pathlib.Path, Element]:
+    network = Network(username, password)
+
+    mapping: MutableMapping[pathlib.Path, Element] = {}
+
+    def fetch(paths: Set[pathlib.Path]):
+        for path in paths:
+            # Avoid calling the same paths because they're reused somewhere
+            # else.
+            if path in mapping:
+                continue
+
+            print(f"Fetch {path}")
+
+            # Requesting the entity requires a unix path.
+            element = network.request(str(pathlib.PurePath(*path.parts)))
+            mapping[path] = element
+
+            # Find all extension in the entities. We need to load them as well.
+            extensions: Set[pathlib.Path] = set()
+            for message in element.findall(".//message[@extends]"):
+                extends = message.get("extends")
+                if extends is None:
+                    continue
+
+                extension = pathlib.Path("entity",
+                                         *_extends(extends).path.parts)
+                extensions.add(extension)
+
+            fetch(extensions)
+
+    fetch(paths)
+
+    return mapping
+
+
+def _entities(input: pathlib.Path, mappings: Mapping[pathlib.Path,
+                                                     Element]) -> List[Entity]:
+    return [
+        _entity(input, path, element, mappings)
+        for path, element in mappings.items()
     ]
 
-    return writer(loaded_entities, options)
+
+def _entity(input: pathlib.Path, path: pathlib.Path, element: Element,
+            mappings: Mapping[pathlib.Path, Element]) -> Entity:
+    print(f"Parsing {path}")
+
+    name = path.stem
+    version = _version(name, element)
+    root = _root(name, version, element)
+    methods = _methods(element)
+    message = _message(input, root, mappings)
+    package = _package(input, path, name)
+
+    return Entity(name, path, package, version, methods, message)
 
 
-def _load(input: pathlib.Path, name: str, value: EntityValue,
-          entities: EntitiesMap) -> Entity:
-    version = _max_version(name, value.entity)
-    if version == -1:
-        root_message = value.entity.find(f"message[@name='{name}']")
-    else:
-        root_message = value.entity.find(f"message[@name='{name}.{version}']")
-
-    if root_message is None:
-        raise NameError(f"Root message not found for input {name}")
-
-    methods = [
-        element.get("method") or "GET"
-        for element in value.entity.findall("operations/operation")
-    ]
-    message = _load_message(input, root_message, entities)
-    package = _package(input, value.path, name)
-
-    return Entity(name, value.path, package, version, methods, message)
-
-
-def _max_version(name: str, entity: Element) -> int:
+def _version(name: str, element: Element) -> int:
     version = -1
-    for element in list(entity):
-        if (element.tag != "message"
-                or not element.attrib["name"].startswith(name)):
+    for sub_element in list(element):
+        if (sub_element.tag != "message"
+                or not sub_element.attrib["name"].startswith(name)):
             continue
 
-        if "." in element.attrib["name"]:
-            version = max(version, int(element.attrib["name"].split(".")[1]))
+        if "." in sub_element.attrib["name"]:
+            version = max(version,
+                          int(sub_element.attrib["name"].split(".")[1]))
 
     return version
 
 
+def _root(name: str, version: int, element: Element) -> Element:
+    if version == -1:
+        root = element.find(f"message[@name='{name}']")
+    else:
+        root = element.find(f"message[@name='{name}.{version}']")
+
+    assert root is not None, "Root message not found for input {name}"
+
+    return root
+
+
+def _methods(element: Element) -> List[str]:
+    return [
+        operation.get("method") or "GET"
+        for operation in element.findall("operations/operation")
+    ]
+
+
 def _package(input: pathlib.Path, path: pathlib.Path,
              name: str) -> pathlib.Path:
-    parts = []
-    target = path.parts[0]
-    is_matched = False
-    for part in input.parts:
-        if target == part:
-            is_matched = True
+    folder = pathlib.Path(*input.parts[input.parts.index("entity"):])
 
-        if is_matched:
-            parts.append(part)
+    package = path.parts
+    for part in folder.parts:
+        if part == package[0]:
+            package = package[1:]
+        else:
+            break
 
-    return path.relative_to(pathlib.Path(*parts)).parent
+    return pathlib.Path(*package).parent
 
 
-def _load_message(input: pathlib.Path, message: Element,
-                  entities: EntitiesMap) -> Message:
-    name = message.get("name").split(".")[0]
-    is_array = message.get("type") == "array"
-    nullable = _is_message_nullable(message.get("subtype"))
+def _message(input: pathlib.Path, element: Element,
+             mappings: Mapping[pathlib.Path, Element]) -> Message:
+    name = element.get("name").split(".")[0]
+    is_array = element.get("type") == "array"
+    nullable = _is_message_nullable(element.get("subtype"))
 
     properties_raw: List[Element] = []
     extends_raw: Optional[str] = None
     if is_array:
-        definition = message.find("message[@type='definition']")
-        properties_raw = message.findall(
+        definition = element.find("message[@type='definition']")
+        properties_raw = element.findall(
             "message[@type='definition']/property")
-        messages_raw = message.findall("message[@type='definition']/message")
+        messages_raw = element.findall("message[@type='definition']/message")
         extends_raw = definition.get("extends")
     else:
-        properties_raw = message.findall("./property")
-        messages_raw = message.findall("./message")
-        extends_raw = message.get("extends")
+        properties_raw = element.findall("./property")
+        messages_raw = element.findall("./message")
+        extends_raw = element.get("extends")
 
-    properties = [_load_property(property) for property in properties_raw]
-    messages = [
-        _load_message(input, message, entities) for message in messages_raw
-    ]
+    properties = [_property(property) for property in properties_raw]
+    messages = [_message(input, message, mappings) for message in messages_raw]
 
-    extends = None
+    parent: Optional[Entity] = None
     if extends_raw is not None:
-        extends_name = _load_extends(extends_raw).name_components.name
-        extends = _load(input, extends_name, entities[extends_name], entities)
+        extends = _extends(extends_raw)
 
-    return Message(name, is_array, nullable, properties, messages, extends)
+        extension = pathlib.Path("entity", *extends.path.parts)
+        parent = _entity(input, extension, mappings[extension], mappings)
+
+    return Message(name, is_array, nullable, properties, messages, parent)
 
 
-def _load_property(element) -> Property:
+def _property(element: Element) -> Property:
+    name = element.get("name")
+    type = element.get("type")
+
+    assert name is not None and type is not None, "All property require a name and a type"
+
     subtype = element.get("subtype")
     key = element.get("key")
 
-    return Property(element.get("name"), element.get("type"),
-                    element.get("method"), _is_property_nullable(subtype),
-                    _enum(subtype), _is_key(key), _is_optional_key(key),
-                    _get_key_ids(key))
+    return Property(name, type, element.get("method"),
+                    _is_property_nullable(subtype), _enum(subtype),
+                    _is_key(key), _is_optional_key(key), _get_key_ids(key))
 
 
 def _is_message_nullable(subtype: Optional[str]) -> bool:
@@ -161,10 +220,7 @@ def _enum(subtype: Optional[str]) -> Optional[List[str]]:
 
 
 def _is_key(key: Optional[str]) -> bool:
-    if key is not None:
-        return True
-
-    return False
+    return key is not None
 
 
 def _is_optional_key(key: Optional[str]) -> bool:
@@ -187,24 +243,22 @@ def _get_key_ids(key: Optional[str]) -> List[str]:
     return []
 
 
-NameComponents = NamedTuple("NameComponents", [("name", str),
-                                               ("version", int)])
-Extends = NamedTuple("Extends", [("scheme", str), ("path", pathlib.Path),
-                                 ("name_components", NameComponents)])
+Name = NamedTuple("Name", [("base", str), ("version", int)])
+Extends = NamedTuple("Extends", [("name", Name), ("path", pathlib.Path)])
 
 
-def _load_extends(extends: str) -> Extends:
-    components = urllib.parse.urlparse(extends)
+def _extends(raw: str) -> Extends:
+    components = urllib.parse.urlparse(raw)
     path = pathlib.Path(components.netloc) / pathlib.Path(components.path[1:])
-    name_components = _load_name_components(path.stem)
-    path = path.with_name(name_components.name)
+    name = _name(path.stem)
+    path = path.with_name(name.base)
 
-    return Extends(components.scheme, path, name_components)
+    return Extends(name, path)
 
 
-def _load_name_components(name: str) -> NameComponents:
-    if "." not in name:
-        return NameComponents(name, -1)
+def _name(raw: str) -> Name:
+    if "." not in raw:
+        return Name(raw, -1)
 
-    components = name.split(".")
-    return NameComponents(components[0], int(components[1]))
+    components = raw.split(".")
+    return Name(components[0], int(components[1]))

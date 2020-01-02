@@ -1,6 +1,6 @@
 # Install
 ```bash
-pip3 install -e .
+python3 -m pip install .
 ```
 
 ## Entity

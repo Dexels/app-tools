@@ -55,7 +55,7 @@ def _fetch(paths: Set[pathlib.Path], username: str,
             print(f"Fetch {path}")
 
             # Requesting the entity requires a unix path.
-            element = network.request(str(pathlib.PurePath(*path.parts)))
+            element = network.request(str(path.as_posix()))
             mapping[path] = element
 
             # Find all extension in the entities. We need to load them as well.
@@ -118,7 +118,7 @@ def _root(name: str, version: int, element: Element) -> Element:
     else:
         root = element.find(f"message[@name='{name}.{version}']")
 
-    assert root is not None, "Root message not found for input {name}"
+    assert root is not None, f"Root message not found for input {name}"
 
     return root
 

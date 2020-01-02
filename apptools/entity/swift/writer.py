@@ -37,7 +37,6 @@ def _write_entity(entity: Entity, output: pathlib.Path) -> None:
     datamodel_class = datamodel / f"{entity.name}Entity.swift"
     with IndentedWriter(path=datamodel_class) as writer:
         _write_datamodel(writer, entity)
-    return
 
     logic = output / _capitalize_path(entity.package / "logic")
     logic.mkdir(parents=True, exist_ok=True)

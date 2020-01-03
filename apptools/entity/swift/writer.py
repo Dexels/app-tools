@@ -6,11 +6,9 @@ from apptools.entity.navajo import Entity, Message, Property
 from apptools.entity.io import IndentedWriter
 from apptools.entity.text import camelcase, capitalize
 
-# TODO Tasks:
-#   * Remove Alamofire prefix
-#   * Service struct should be an enum, meaning we cannot instantiate it and
-#     we can remove the private initializer.
-#   * Use Swiftlints marker to disable all linting on generated files.
+# TODO: Remove Alamofire prefix
+# TODO: Service struct should be an enum, meaning we cannot instantiate it and we can remove the private initializer.
+# TODO: Use Swiftlints marker to disable all linting on generated files.
 
 reserved_words = [
     "guard", "Protocol", "Self", "Type", "__COLUMN__", "__FILE__",

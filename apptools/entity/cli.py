@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import pathlib
 import sys
 
 from typing import Mapping, Callable, List
@@ -25,6 +26,11 @@ def main():
 
     swift_parser = subparsers.add_parser(name="swift", parents=[parent_parser])
     swift_parser.set_defaults(writer=swift_write)
+    swift_parser.add_argument("-x",
+                              "--xcodeproj",
+                              help="Path to xcodeproj file",
+                              required=True,
+                              type=pathlib.Path)
 
     typescript_parser = subparsers.add_parser(name="typescript",
                                               parents=[parent_parser])

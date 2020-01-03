@@ -1,6 +1,7 @@
 import pathlib
+import os
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Set
 
 from apptools.entity.navajo import Entity, Message, Property
 from apptools.entity.io import IndentedWriter
@@ -25,30 +26,59 @@ reserved_words = [
 def write(entities: List[Entity], options: Dict[str, Any]) -> None:
     output = options["output"]
 
+    paths: Set[pathlib.Path] = set()
     for entity in entities:
-        _write_entity(entity, output)
+        paths |= _write_entity(entity, output)
+
+    if paths:
+        xcode = pathlib.Path(__file__).parent / "xcode.rb"
+        xcodeproj = options["xcodeproj"]
+
+        # Xcode tool works with relative paths from the xcodeproj file
+        rel_paths = [path.relative_to(xcodeproj.parent) for path in paths]
+        os.system(
+            f"ruby {xcode} {xcodeproj} {' '.join([str(path) for path in rel_paths])}"
+        )
 
 
-def _write_entity(entity: Entity, output: pathlib.Path) -> None:
+def _write_entity(entity: Entity, output: pathlib.Path) -> Set[pathlib.Path]:
+    paths: Set[pathlib.Path] = set()
+
     datamodel = output / _capitalize_path(entity.package / "datamodel")
     datamodel.mkdir(parents=True, exist_ok=True)
     datamodel_class = datamodel / f"{entity.name}Entity.swift"
     with IndentedWriter(path=datamodel_class) as writer:
+        print(f"Write {str(datamodel_class)}")
+
         _write_datamodel(writer, entity)
+
+        if not datamodel_class.exists():
+            paths.add(datamodel_class)
 
     logic = output / _capitalize_path(entity.package / "logic")
     logic.mkdir(parents=True, exist_ok=True)
     logic_class = logic / f"{entity.name}.swift"
     if not logic_class.exists():
         with IndentedWriter(path=logic_class) as writer:
+            print(f"Write {str(logic_class)}")
+
             _write_logic(writer, entity)
+
+            paths.add(logic_class)
 
     if entity.methods:
         service = output / _capitalize_path(entity.package / "service")
         service.mkdir(parents=True, exist_ok=True)
         service_class = service / f"{entity.name}Service.swift"
         with IndentedWriter(path=service_class) as writer:
+            print(f"Write {str(service_class)}")
+
             _write_service(writer, entity)
+
+            if not service_class.exists():
+                paths.add(service_class)
+
+    return paths
 
 
 def _write_datamodel(writer: IndentedWriter, entity: Entity) -> None:

@@ -7,6 +7,9 @@ setuptools.setup(
     author="Dexelonian",
     author_email="info@dexels.com",
     packages=setuptools.find_packages(exclude=["test"]),
+    package_data={
+        '': ['xcode.rb'],
+    },
     python_requires=">=3.7",
     entry_points="""
     [console_scripts]

@@ -1,16 +1,15 @@
 import pathlib
+import os
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Set
 
 from apptools.entity.navajo import Entity, Message, Property
 from apptools.entity.io import IndentedWriter
 from apptools.entity.text import camelcase, capitalize
 
-# TODO Tasks:
-#   * Remove Alamofire prefix
-#   * Service struct should be an enum, meaning we cannot instantiate it and
-#     we can remove the private initializer.
-#   * Use Swiftlints marker to disable all linting on generated files.
+# TODO: Remove Alamofire prefix
+# TODO: Service struct should be an enum, meaning we cannot instantiate it and we can remove the private initializer.
+# TODO: Use Swiftlints marker to disable all linting on generated files.
 
 reserved_words = [
     "guard", "Protocol", "Self", "Type", "__COLUMN__", "__FILE__",
@@ -27,30 +26,59 @@ reserved_words = [
 def write(entities: List[Entity], options: Dict[str, Any]) -> None:
     output = options["output"]
 
+    paths: Set[pathlib.Path] = set()
     for entity in entities:
-        _write_entity(entity, output)
+        paths |= _write_entity(entity, output)
+
+    if paths:
+        xcode = pathlib.Path(__file__).parent / "xcode.rb"
+        xcodeproj = options["xcodeproj"]
+
+        # Xcode tool works with relative paths from the xcodeproj file
+        rel_paths = [path.relative_to(xcodeproj.parent) for path in paths]
+        os.system(
+            f"ruby {xcode} {xcodeproj} {' '.join([str(path) for path in rel_paths])}"
+        )
 
 
-def _write_entity(entity: Entity, output: pathlib.Path) -> None:
+def _write_entity(entity: Entity, output: pathlib.Path) -> Set[pathlib.Path]:
+    paths: Set[pathlib.Path] = set()
+
     datamodel = output / _capitalize_path(entity.package / "datamodel")
     datamodel.mkdir(parents=True, exist_ok=True)
     datamodel_class = datamodel / f"{entity.name}Entity.swift"
     with IndentedWriter(path=datamodel_class) as writer:
+        print(f"Write {str(datamodel_class)}")
+
         _write_datamodel(writer, entity)
+
+        if not datamodel_class.exists():
+            paths.add(datamodel_class)
 
     logic = output / _capitalize_path(entity.package / "logic")
     logic.mkdir(parents=True, exist_ok=True)
     logic_class = logic / f"{entity.name}.swift"
     if not logic_class.exists():
         with IndentedWriter(path=logic_class) as writer:
+            print(f"Write {str(logic_class)}")
+
             _write_logic(writer, entity)
+
+            paths.add(logic_class)
 
     if entity.methods:
         service = output / _capitalize_path(entity.package / "service")
         service.mkdir(parents=True, exist_ok=True)
         service_class = service / f"{entity.name}Service.swift"
         with IndentedWriter(path=service_class) as writer:
+            print(f"Write {str(service_class)}")
+
             _write_service(writer, entity)
+
+            if not service_class.exists():
+                paths.add(service_class)
+
+    return paths
 
 
 def _write_datamodel(writer: IndentedWriter, entity: Entity) -> None:
@@ -416,7 +444,7 @@ def _write_service(writer: IndentedWriter, entity: Entity) -> None:
     writer.newline()
 
     for i, method in enumerate(entity.methods):
-        for key_id in entity.key_ids:
+        for j, key_id in enumerate(entity.key_ids):
             properties = entity.key_properties(key_id)
             required_properties = [
                 property for property in properties if not property.nullable
@@ -449,6 +477,9 @@ def _write_service(writer: IndentedWriter, entity: Entity) -> None:
                 _write_service_delete(indented_writer, entity, parameters,
                                       properties, required_properties,
                                       optional_properties)
+
+            if j != len(entity.key_ids) - 1:
+                writer.newline()
 
         if not entity.key_ids:
             if method == "GET":
@@ -499,7 +530,7 @@ def _write_service_get(writer: IndentedWriter,
                 indented_writer.indented().newline()
             indented_writer.writeln("]")
         elif optional_properties:
-            indented_writer.writeln("var parameters: [String: Any] = []")
+            indented_writer.writeln("var parameters: [String: Any] = [:]")
 
         for property in optional_properties:
             indented_writer.writeln(
@@ -559,7 +590,7 @@ def _write_service_put(writer: IndentedWriter,
                 indented_writer.indented().newline()
             indented_writer.writeln("]")
         elif optional_properties:
-            indented_writer.writeln("var parameters: [String: Any] = []")
+            indented_writer.writeln("var parameters: [String: Any] = [:]")
 
         for property in optional_properties:
             indented_writer.writeln(
@@ -577,7 +608,7 @@ def _write_service_put(writer: IndentedWriter,
             "parameterInputEncoding: parameterInputEncoding")
 
     indented_writer.writeln(
-        f'let input = EncodableEncoding({",".join(encoding_parameters)})')
+        f'let input = EncodableEncoding({", ".join(encoding_parameters)})')
     indented_writer.newline()
     indented_writer.writeln(
         f'return JSONDecodableOperation(path: path, method: .put, headers: headers, input: input, output: {entity.name}.self)'
@@ -601,8 +632,65 @@ def _write_service_post(writer: IndentedWriter,
             f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> Operation {{"
         )
 
+    encoding_arguments: List[str] = [_variable_name(entity.name)]
+
+    indented_writer = writer.indented()
+
+    if properties:
+        if required_properties:
+            if optional_properties:
+                indented_writer.write("var")
+            else:
+                indented_writer.write("let")
+
+            indented_writer.appendln(" parameters: [String: Any] = [")
+            for i, property in enumerate(required_properties):
+                indented_writer.indented().write(
+                    f'"{property.name}": {_variable_name(property.name)}')
+                if i != len(required_properties) - 1:
+                    indented_writer.indented().append(",")
+                indented_writer.indented().newline()
+            indented_writer.writeln("]")
+        elif optional_properties:
+            indented_writer.writeln("var parameters: [String: Any] = [:]")
+
+        for property in optional_properties:
+            indented_writer.writeln(
+                f'parameters["{property.name}"] = {_variable_name(property.name)}'
+            )
+
+        indented_writer.newline()
+        indented_writer.writeln(
+            "let encoding = Alamofire.URLEncoding(destination: .queryString, boolEncoding: .literal)"
+        )
+        indented_writer.writeln(
+            "let parameterInputEncoding = ParameterInputEncoding(encoding: encoding, parameters: parameters)"
+        )
+        encoding_arguments.append(
+            "parameterInputEncoding: parameterInputEncoding")
+
+    indented_writer.writeln(
+        f'let input = EncodableEncoding({", ".join(encoding_arguments)})')
+    indented_writer.newline()
+    indented_writer.writeln(
+        f'return PlainOperation(path: path, method: .post, headers: headers, input: input)'
+    )
+
+    writer.writeln("}")
+
+
+def _write_service_delete(writer: IndentedWriter,
+                          entity: Entity,
+                          parameters: List[str] = [],
+                          properties: List[Property] = [],
+                          required_properties: List[Property] = [],
+                          optional_properties: List[Property] = []) -> None:
+    writer.writeln(
+        f"static func remove({', '.join(parameters)}) -> Operation {{")
+
     operation_parameters: Dict[str, str] = {
         "path": "path",
+        "method": ".delete",
         "headers": "headers"
     }
 
@@ -624,7 +712,7 @@ def _write_service_post(writer: IndentedWriter,
                 indented_writer.indented().newline()
             indented_writer.writeln("]")
         elif optional_properties:
-            indented_writer.writeln("var parameters: [String: Any] = []")
+            indented_writer.writeln("var parameters: [String: Any] = [:]")
 
         for property in optional_properties:
             indented_writer.writeln(
@@ -640,65 +728,9 @@ def _write_service_post(writer: IndentedWriter,
         )
         operation_parameters["input"] = "input"
 
-    operation_parameters["output"] = f"{entity.name}.self"
-    indented_writer.writeln(
-        f'return PlainOperation({", ".join([f"{name}: {value}" for (name, value) in operation_parameters.items()])})'
-    )
-
-    writer.writeln("}")
-
-
-def _write_service_delete(writer: IndentedWriter,
-                          entity: Entity,
-                          parameters: List[str] = [],
-                          properties: List[Property] = [],
-                          required_properties: List[Property] = [],
-                          optional_properties: List[Property] = []) -> None:
-    writer.writeln(
-        f"static func remove({', '.join(parameters)}) -> Operation {{")
-
-    encoding_parameters: List[str] = [_variable_name(entity.name)]
-
-    indented_writer = writer.indented()
-
-    if properties:
-        if required_properties:
-            if optional_properties:
-                indented_writer.write("var")
-            else:
-                indented_writer.write("let")
-
-            indented_writer.appendln(" parameters: [String: Any] = [")
-            for i, property in enumerate(required_properties):
-                indented_writer.indented().write(
-                    f'"{property.name}": {_variable_name(property.name)}')
-                if i != len(required_properties) - 1:
-                    indented_writer.indented().append(",")
-                indented_writer.indented().newline()
-            indented_writer.writeln("]")
-        elif optional_properties:
-            indented_writer.writeln("var parameters: [String: Any] = []")
-
-        for property in optional_properties:
-            indented_writer.writeln(
-                f'parameters["{property.name}"] = {_variable_name(property.name)}'
-            )
-
-        indented_writer.newline()
-        indented_writer.writeln(
-            "let encoding = Alamofire.URLEncoding(destination: .queryString, boolEncoding: .literal)"
-        )
-        indented_writer.writeln(
-            "let parameterInputEncoding = ParameterInputEncoding(encoding: encoding, parameters: parameters)"
-        )
-        encoding_parameters.append(
-            "parameterInputEncoding: parameterInputEncoding")
-
-    indented_writer.writeln(
-        f'let input = EncodableEncoding({",".join(encoding_parameters)})')
     indented_writer.newline()
     indented_writer.writeln(
-        f'return PlainOperation(path: path, method: .put, headers: headers, input: input)'
+        f'return PlainOperation({", ".join([f"{name}: {value}" for (name, value) in operation_parameters.items()])})'
     )
 
     writer.writeln("}")

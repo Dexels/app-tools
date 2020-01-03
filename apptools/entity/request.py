@@ -35,8 +35,6 @@ class Call(object):
         opener = urllib.request.urlopen(request)
         response = opener.read().decode()
 
-        print(response)
-
         return XML(response)
 
     @property

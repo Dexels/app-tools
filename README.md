@@ -1,21 +1,23 @@
-# App-entity
-Tool to transform the entities to code. We have support for multiple languages.
-The first argument should be which writer you wanna use. See app-entity -h for
-all possible writers.
+# App-tools
+App-tools is a bundle of tools that are useful for writing client applications. Currently it consists of the following tools:
+- app-entity
 
 ## Install/Update
 ```bash
 python3 -m pip install .
 ```
 
-For now this will install a single tool called app-entity. In the future there
-could be more.
+## App-entity
+App-entity is a tool to generate boiler plate client code for apps that use an entity based API. It supports multiple languages (writers) and new ones may be added. Depending on the target language, it will generate datamodel classes (objects), stubs for logic classes, and services to perform operations defined in the API.
 
-The tool should display all the arguments when you run app-entity -h. Each
+The first argument should be which writer you wanna use. See app-entity -h for
+all possible writers.
+
+The tool displays all possible arguments when you run app-entity -h. Each
 writer can have different arguments. To check them out run app-entity swift -h.
 
-## Examples
-Couple examples how to run:
+### Examples
+The examples below show how the tool could be used:
 ```bash 
 app-entity swift \
     --username **** \

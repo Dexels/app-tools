@@ -50,7 +50,7 @@ def _rel_import(source: pathlib.Path, destination: pathlib.Path,
     # current dir dot.
     # For example: "./Official" becomes "Official" which is not the same as an
     # import statement.
-    return str(os.path.relpath(destination, source)) + "/" + name
+    return str(pathlib.Path(os.path.relpath(destination, source)).as_posix()) + "/" + name
 
 
 def _dependencies(message: Message) -> List[Entity]:

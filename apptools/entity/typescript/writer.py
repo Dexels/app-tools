@@ -107,7 +107,7 @@ def _write_datamodel_class(writer: IndentedWriter,
                 type = sub_message.extends.name
 
         variable = name
-        if message.nullable:
+        if sub_message.nullable:
             variable += "?"
         variable += f": {type};"
 

@@ -1,5 +1,6 @@
 import os
 import pathlib
+import shutil
 
 from typing import List, Dict, Any, Tuple, Set
 
@@ -7,13 +8,16 @@ from apptools.entity.navajo import Entity, Message
 from apptools.entity.io import IndentedWriter
 from apptools.entity.text import camelcase, capitalize
 
-
 def write(entities: List[Entity], options: Dict[str, Any]) -> None:
     output = options["output"]
+    # Make sure to remove all previously generated files in correct folder
+    remove_all(output)
 
     for entity in entities:
         _write_entity(entity, output)
 
+def remove_all(output: pathlib.Path) -> None:
+    shutil.rmtree(output)
 
 def _write_entity(entity: Entity, output: pathlib.Path) -> None:
     datamodel = output / entity.package

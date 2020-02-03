@@ -14,5 +14,6 @@ setuptools.setup(
     entry_points="""
     [console_scripts]
     app-entity=apptools.entity.cli:main
+    app-strings=apptools.strings.cli:main
     """,
 )

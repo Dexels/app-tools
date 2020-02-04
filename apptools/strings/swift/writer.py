@@ -17,7 +17,9 @@ def write(strings: Dict[str, Dict[str, str]], options: Options):
         for key in sorted(strings):
             value = regex.sub("%\\1@", strings[key]["value"])
             escaped_value = escape(value)
-
+            comment = strings[key].get("comment")
+            if comment:
+                fp.write(f"/* {comment} */\n")
             fp.write(f"\"{key}\" = \"{escaped_value}\";\n")
 
 

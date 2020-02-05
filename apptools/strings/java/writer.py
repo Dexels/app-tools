@@ -20,6 +20,12 @@ def write(strings: Dict[str, Dict[str, str]], options: Options):
             value = strings[key]["value"]
             escaped_value = escape(value)
 
+            comment = strings[key].get("comment")
+            if comment:
+                fp.write(
+                    f"\n\t<!-- {comment} -->\n"
+                )
+
             fp.write(
                 f"\t<string name=\"{key}\" formatted=\"false\">\"{escaped_value}\"</string>\n"
             )

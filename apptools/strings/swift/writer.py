@@ -19,7 +19,7 @@ def write(strings: Dict[str, Dict[str, str]], options: Options):
             escaped_value = escape(value)
             comment = strings[key].get("comment")
             if comment:
-                fp.write(f"/* {comment} */\n")
+                fp.write(f"\n/* {comment} */\n")
             fp.write(f"\"{key}\" = \"{escaped_value}\";\n")
 
 

@@ -20,9 +20,14 @@ def write(writer: Writer, options: Options) -> int:
     password: str = options["password"]
     input: pathlib.Path = options["input"]
 
+    includes: List[str] = options.get("entities", None)
     entities: EntitiesMap = {}
     for file in input.rglob("*.xml"):
         if file.stem.endswith("entitymapping"):
+            continue
+            
+        relative_path = file.relative_to(input)
+        if includes is not None and str(relative_path) not in includes:
             continue
 
         rpc = Rpc.make(username, password, file)

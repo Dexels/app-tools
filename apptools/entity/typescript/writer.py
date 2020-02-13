@@ -74,7 +74,6 @@ def _write_datamodel_class(writer: IndentedWriter,
     writer.write(f"export interface {message.name}")
     if message.extends is not None:
         writer.append(f" extends {message.extends.name}")
-    writer.appendln(" {")
 
     variables: Set[str] = set()
 
@@ -86,9 +85,10 @@ def _write_datamodel_class(writer: IndentedWriter,
         type = _type(property.type)
 
         variable = name
+        variable += f": {type}"
         if property.nullable:
-            variable += "?"
-        variable += f": {type};"
+            variable += " | null"
+        variable += ";"
 
         variables.add(variable)
 
@@ -111,16 +111,23 @@ def _write_datamodel_class(writer: IndentedWriter,
                 type = sub_message.extends.name
 
         variable = name
+        variable += f": {type}"
         if sub_message.nullable:
-            variable += "?"
-        variable += f": {type};"
+            variable += " | null"
+        variable += ";"
 
         variables.add(variable)
 
-    for variable in sorted(variables):
-        writer.indented().writeln(variable)
+    # When there are no variables, then just render an empty interface, but with {} on 1 line
+    if variables:
+        writer.appendln(" {")
+        for variable in sorted(variables):
+            writer.indented().writeln(variable)
 
-    writer.writeln("}")
+        writer.writeln("}")
+    else:
+        writer.appendln(" {}")
+
 
     if interfaces:
         writer.newline()

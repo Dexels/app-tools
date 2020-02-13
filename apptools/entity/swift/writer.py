@@ -455,7 +455,7 @@ def _write_service(writer: IndentedWriter, entity: Entity) -> None:
 
             parameters: List[str] = []
             for property in properties:
-                name = camelcase(property.name)
+                name = _variable_name(property.name)
                 type = _swift_type(property.type)
                 optional = "?" if property.nullable else ""
 

@@ -625,11 +625,11 @@ def _write_service_post(writer: IndentedWriter,
                         optional_properties: List[Property] = []) -> None:
     if parameters:
         writer.writeln(
-            f"static func insert({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> Operation {{"
+            f"static func insert({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> JSONDecodableOperation<{entity.name}> {{"
         )
     else:
         writer.writeln(
-            f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> Operation {{"
+            f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> JSONDecodableOperation<{entity.name}> {{"
         )
 
     encoding_arguments: List[str] = [_variable_name(entity.name)]
@@ -673,7 +673,7 @@ def _write_service_post(writer: IndentedWriter,
         f'let input = EncodableEncoding({", ".join(encoding_arguments)})')
     indented_writer.newline()
     indented_writer.writeln(
-        f'return PlainOperation(path: path, method: .post, headers: headers, input: input)'
+        f'return JSONDecodableOperation(path: path, method: .post, headers: headers, input: input, output: {entity.name}.self)'
     )
 
     writer.writeln("}")
@@ -686,7 +686,7 @@ def _write_service_delete(writer: IndentedWriter,
                           required_properties: List[Property] = [],
                           optional_properties: List[Property] = []) -> None:
     writer.writeln(
-        f"static func remove({', '.join(parameters)}) -> Operation {{")
+        f"static func remove({', '.join(parameters)}) -> JSONDecodableOperation<{entity.name}> {{")
 
     operation_parameters: Dict[str, str] = {
         "path": "path",
@@ -728,9 +728,10 @@ def _write_service_delete(writer: IndentedWriter,
         )
         operation_parameters["input"] = "input"
 
+    operation_parameters["output"] = f"{entity.name}.self"
     indented_writer.newline()
     indented_writer.writeln(
-        f'return PlainOperation({", ".join([f"{name}: {value}" for (name, value) in operation_parameters.items()])})'
+        f'return JSONDecodableOperation({", ".join([f"{name}: {value}" for (name, value) in operation_parameters.items()])})'
     )
 
     writer.writeln("}")

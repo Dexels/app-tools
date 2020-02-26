@@ -35,3 +35,11 @@ app-entity java \
     --output "$GIT"/sportlinked-app-android/app/src/main/java/com/dexels/sportlinked
 ```
 
+```bash 
+app-entity typescript \
+    --username **** \
+    --password **** \
+    --input "$GIT"/sportlink/scripts/entity/common/clubweb \
+    --output "$GIT"/com.sportlink.club.web/src/@types/generated
+```
+

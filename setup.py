@@ -10,10 +10,12 @@ setuptools.setup(
     package_data={
         '': ['xcode.rb'],
     },
+    install_requires=["cairosvg~=2.1.3"],
     python_requires=">=3.7",
     entry_points="""
     [console_scripts]
     app-entity=apptools.entity.cli:main
     app-strings=apptools.strings.cli:main
+    app-image=apptools.image.cli:main
     """,
 )

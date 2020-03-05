@@ -12,9 +12,15 @@ def main():
     parser.add_argument('-t',
                         '--target',
                         help='only build for a specific target')
+    parser.add_argument('-o',
+                        '--overwrite',
+                        help='Overwrite a specific spec settings',
+                        required=False,
+                        action='append')
+
     args = parser.parse_args()
 
-    distribute(args.spec, args.target)
+    distribute(args.spec, args.target, args.overwrite)
 
     exit()
 

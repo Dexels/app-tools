@@ -13,8 +13,27 @@ from apptools.image.image.svg2png import svg2png
 from apptools.image.image.work import should_do_work_for_platform, should_do_work_for_target
 
 
-def distribute(spec, only_for_target):
+def distribute(spec, only_for_target, overwrites):
     print("Distribute project: '%s'" % spec.project)
+
+    if overwrites is not None:
+        for overwrite in overwrites:
+            obj = spec
+
+            components = overwrite.split(".")
+            for component in components:
+                if ":" in component:
+                    name = component.split(":")[0]
+                    index = component.split(":")[1]
+                    obj = getattr(obj, name)[int(index)]
+                else:
+                    if "=" in component:
+                        path = component.split("=")[0]
+                        value = component.split("=")[1]
+
+                        setattr(obj, path, value)
+                    else:
+                        obj = getattr(obj, component)
 
     jobs = []
     for image in spec.images:

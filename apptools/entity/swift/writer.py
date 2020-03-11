@@ -47,36 +47,39 @@ def _write_entity(entity: Entity, output: pathlib.Path) -> Set[pathlib.Path]:
     datamodel = output / _capitalize_path(entity.package / "datamodel")
     datamodel.mkdir(parents=True, exist_ok=True)
     datamodel_class = datamodel / f"{entity.name}Entity.swift"
+
+    if not datamodel_class.exists():
+        paths.add(datamodel_class)
+
     with IndentedWriter(path=datamodel_class) as writer:
         print(f"Write {str(datamodel_class)}")
 
         _write_datamodel(writer, entity)
 
-        if not datamodel_class.exists():
-            paths.add(datamodel_class)
-
     logic = output / _capitalize_path(entity.package / "logic")
     logic.mkdir(parents=True, exist_ok=True)
     logic_class = logic / f"{entity.name}.swift"
+
     if not logic_class.exists():
+        paths.add(logic_class)
+
         with IndentedWriter(path=logic_class) as writer:
             print(f"Write {str(logic_class)}")
 
             _write_logic(writer, entity)
 
-            paths.add(logic_class)
-
     if entity.methods:
         service = output / _capitalize_path(entity.package / "service")
         service.mkdir(parents=True, exist_ok=True)
         service_class = service / f"{entity.name}Service.swift"
+
+        if not service_class.exists():
+            paths.add(service_class)
+
         with IndentedWriter(path=service_class) as writer:
             print(f"Write {str(service_class)}")
 
             _write_service(writer, entity)
-
-            if not service_class.exists():
-                paths.add(service_class)
 
     return paths
 

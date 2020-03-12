@@ -87,7 +87,7 @@ def _write_datamodel_class(writer: IndentedWriter,
         variable = name
         variable += f": {type}"
         if property.nullable:
-            variable += " | undefined"
+            variable += " | null"
         variable += ";"
 
         variables.add(variable)
@@ -113,7 +113,7 @@ def _write_datamodel_class(writer: IndentedWriter,
         variable = name
         variable += f": {type}"
         if sub_message.nullable:
-            variable += " | undefined"
+            variable += " | null"
         variable += ";"
 
         variables.add(variable)

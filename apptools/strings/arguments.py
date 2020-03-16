@@ -1,3 +1,5 @@
+"""Argument parser for the command-line interface"""
+
 import argparse
 import pathlib
 

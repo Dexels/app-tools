@@ -1,4 +1,7 @@
-def should_do_work_for_platform(image, platform):
+def should_do_work_for_platform(image, platform, only_for_platform):
+    if only_for_platform is not None and only_for_platform != platform.name:
+        return False
+
     if image.platforms is None and platform.is_default_platform:
         return True
 
@@ -12,10 +15,7 @@ def should_do_work_for_platform(image, platform):
     return False
 
 
-def should_do_work_for_target(image, target, only_for_target):
-    if only_for_target is not None and only_for_target != target.name:
-        return False
-
+def should_do_work_for_target(image, target):
     if image.targets is not None and target.name not in image.targets:
         return False
 

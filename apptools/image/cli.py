@@ -9,9 +9,9 @@ from apptools.image.image.distribute import distribute
 
 def main():
     parser = ArgumentParser(allow_abbrev=False, parents=[spec_parser])
-    parser.add_argument('-t',
-                        '--target',
-                        help='only build for a specific target')
+    parser.add_argument('-p',
+                        '--platform',
+                        help='only build for a specific platform')
     parser.add_argument('-o',
                         '--overwrite',
                         help='Overwrite a specific spec settings',
@@ -20,7 +20,7 @@ def main():
 
     args = parser.parse_args()
 
-    distribute(args.spec, args.target, args.overwrite)
+    distribute(args.spec, args.platform, args.overwrite)
 
     exit()
 

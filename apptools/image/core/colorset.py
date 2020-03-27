@@ -11,7 +11,8 @@ class Colorset(object):
         return cls(json)
 
     def get(self, key):
-        if getattr(self, key) is not None:
-            return getattr(self, key)
-
-        return self._color
+        try:
+            if getattr(self, key) is not None:
+                return getattr(self, key)
+        except:
+            return self._color

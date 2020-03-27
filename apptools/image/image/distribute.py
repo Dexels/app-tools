@@ -13,7 +13,7 @@ from apptools.image.image.svg2png import svg2png
 from apptools.image.image.work import should_do_work_for_platform, should_do_work_for_target
 
 
-def distribute(spec, only_for_target, overwrites):
+def distribute(spec, only_for_platform, overwrites):
     print("Distribute project: '%s'" % spec.project)
 
     if overwrites is not None:
@@ -37,7 +37,7 @@ def distribute(spec, only_for_target, overwrites):
 
     jobs = []
     for image in spec.images:
-        job = DistributeJob(spec, image, only_for_target)
+        job = DistributeJob(spec, image, only_for_platform)
         jobs.append(job)
 
     print("Executing %s jobs" % len(jobs))
@@ -50,16 +50,15 @@ def distribute(spec, only_for_target, overwrites):
 
 
 class DistributeJob(object):
-    def __init__(self, spec, image, only_for_target):
+    def __init__(self, spec, image, only_for_platform):
         super().__init__()
 
         self.spec = spec
         self.image = image
-        self.only_for_target = only_for_target
+        self.only_for_platform = only_for_platform
 
     def run(self):
-        print("Distribute image: '%s'" % self.image.basename)
-
+        print("Distribute image: '%s'" % file(self.image))
         image_path = join(self.spec.shared_path, 'images', self.image.basename)
 
         filecontent = None
@@ -69,23 +68,23 @@ class DistributeJob(object):
             filecontent = self.load(image_path)
 
         for platform in self.spec.platforms:
-            if not should_do_work_for_platform(self.image, platform):
+            if not should_do_work_for_platform(self.image, platform, self.only_for_platform):
                 print('Skip for platform %s', platform)
                 continue
 
             for target in platform.targets:
-                if not should_do_work_for_target(self.image, target,
-                                                 self.only_for_target):
-                    print('Skip for target %s', target)
+                print('Target %s' % target.name)
+                if not should_do_work_for_target(self.image, target):
+                    print('Skip for target %s' % target)
                     continue
 
                 # since we reuse the filecontent for all images, we need to copy it to be change
                 # free each iteration. Filecontent can be None if it isn't a svg
                 filecontent_copy = deepcopy(filecontent)
+                print('About to save image for %s(%s) at %s' % (target, platform,
+                      image_path))
                 colorized_filecontent = self.colorize(filecontent_copy,
                                                       platform, target)
-                print('Save image for %s(%s) at %s', target, platform,
-                      image_path)
                 self.save(colorized_filecontent, image_path, platform, target)
 
     def load(self, path):
@@ -111,10 +110,11 @@ class DistributeJob(object):
                   (target.name, self.image.basename))
             return filecontent
 
-        print("Colorize image: '%s' with theme: '%s'" %
-              (self.image.basename, selected_theme.name))
+        print("Colorize image: '%s' with theme: '%s' and style: '%s'" %
+              (self.image.basename, selected_theme.name, self.image.style))
 
         colorset = selected_theme.get(self.image.style)
+
         for color_name, color in self.spec.placeholder_colormap.items():
             new_color = colorset.get(color_name)
             if new_color is not None:
@@ -130,7 +130,6 @@ class DistributeJob(object):
                         % (self.image.basename, color, new_color))
 
                 filecontent = filecontent.replace(color, new_color)
-
         return filecontent
 
     def save(self, filecontent, image_path, platform, target):
@@ -236,7 +235,6 @@ class DistributeJob(object):
                                               scale.directory)
             makedirs(destination_directory_path, exist_ok=True)
             destination_path = join(destination_directory_path, image_name)
-
             if self.image.isSVG():
                 scaled_at = self.image.premultiplier * scale.multiplier
                 svg2png(filecontent, scaled_at, destination_path)

@@ -69,7 +69,7 @@ class DistributeJob(object):
 
         for platform in self.spec.platforms:
             if not should_do_work_for_platform(self.image, platform, self.only_for_platform):
-                print('Skip for platform %s', platform)
+                print(f'Skip for platform {platform}')
                 continue
 
             for target in platform.targets:

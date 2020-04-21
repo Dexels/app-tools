@@ -17,8 +17,9 @@ def write(writer: Writer, options: Options) -> int:
     username: str = options["username"]
     password: str = options["password"]
     includes: List[str] = options.get("entities", None)
+    skips: List[str] = options.get("skip", None)
 
-    paths = _entity_mappings_paths(input, includes)
+    paths = _entity_mappings_paths(input, includes, skips)
     mappings = _fetch(paths, username, password)
     entities = _entities(input, mappings)
 
@@ -26,7 +27,8 @@ def write(writer: Writer, options: Options) -> int:
 
 
 def _entity_mappings_paths(path: pathlib.Path,
-                           includes: Optional[List[str]]) -> Set[pathlib.Path]:
+                           includes: Optional[List[str]],
+                           skips: Optional[List[str]]) -> Set[pathlib.Path]:
     paths: Set[pathlib.Path] = set()
     for file in path.rglob("*entitymapping.xml"):
         print(f"Parsing entity mapping: {file}")
@@ -36,7 +38,7 @@ def _entity_mappings_paths(path: pathlib.Path,
             value = property.get("value")
             if value is not None:
                 path = pathlib.Path("entity", value)
-                if _included(path, includes):
+                if (includes is None or str(path) in includes) and (skips is None or str(path) not in skips):
                     paths.add(path)
 
     return paths

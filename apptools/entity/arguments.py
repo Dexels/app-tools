@@ -20,6 +20,11 @@ parser.add_argument("-o",
                     help="Output directory",
                     required=True,
                     type=pathlib.Path)
+parser.add_argument("-s",
+                    "--skip",
+                    help="Skip these entities",
+                    required=False,
+                    action='append')
 parser.add_argument("-e",
                     "--entities",
                     help="Only these entities",

@@ -64,19 +64,29 @@ def _fetch(paths: Set[pathlib.Path], username: str,
             if path in mapping:
                 continue
 
-            print(f"Fetch {path}")
+            name = path.stem
+
+            print(f"Fetch {name}")
 
             # Requesting the entity requires a unix path.
             element = network.request(str(path.as_posix()))
             mapping[path] = element
 
-            # Find all extension in the entities. We need to load them as well.
+            # Find all extension of the highest version of the entity. We need to load them as well.
             extensions: Set[pathlib.Path] = set()
-            for message in element.findall(".//message[@extends]"):
+            version = _version(name, element)
+            root = _root(name, version, element)
+            for message in root.findall(".//message[@extends]"):
                 extends = message.get("extends")
                 if extends is None:
                     continue
 
+                extension = pathlib.Path("entity",
+                                         *_extends(extends).path.parts)
+                extensions.add(extension)
+
+            if root.get("extends") is not None:
+                extends = root.get("extends")
                 extension = pathlib.Path("entity",
                                          *_extends(extends).path.parts)
                 extensions.add(extension)

@@ -222,18 +222,14 @@ def _write_datamodel_class(writer: IndentedWriter,
         nullable = submessage.nullable
 
         if submessage.is_array:
-            if submessage.extends is None or len(
-                    submessage.properties
-            ) > 0 or name != submessage.extends.name:
+            if submessage.extends is None or (len(submessage.properties) + len(submessage.messages)):
                 _write_datamodel_class(indented_writer, submessage, prefix)
                 variable_type = "List<" + prefix + name + ">"
             else:
                 variable_type = "List<" + submessage.extends.name + ">"
             variable_name = camelcase(name) + "List"
         else:
-            if submessage.extends is None or len(
-                    submessage.properties
-            ) > 0 or name != submessage.extends.name:
+            if submessage.extends is None or (len(submessage.properties) + len(submessage.messages)):
                 _write_datamodel_class(indented_writer, submessage, prefix)
                 variable_type = prefix + name
             else:
@@ -344,17 +340,15 @@ def _write_logic_class(writer: IndentedWriter, message: Message) -> None:
         f'super({", ".join(super_arguments_string)});')
     indented_writer.writeln("}")
 
-    for sub_message in message.messages:
-        name = sub_message.name
+    for submessage in message.messages:
+        name = submessage.name
 
-        if sub_message.is_array:
-            if sub_message.extends is None or sub_message.properties or name != sub_message.extends.name:
-                _write_logic_class(indented_writer, sub_message)
+        if submessage.is_array:
+            if submessage.extends is None or submessage.properties or submessage.messages:
+                _write_logic_class(indented_writer, submessage)
         else:
-            if sub_message.extends is None or len(
-                    sub_message.properties
-            ) > 0 or name != sub_message.extends.name:
-                _write_logic_class(indented_writer, sub_message)
+            if submessage.extends is None or (len(submessage.properties) + len(submessage.messages)):
+                _write_logic_class(indented_writer, submessage)
 
     writer.writeln(f"}}")
 
@@ -383,15 +377,13 @@ def _get_super_constructor_parameters(message: Message):
         nullable = message.nullable
         # special case for array messages
         if message.is_array:
-            if message.extends is None or len(
-                    message.properties) or name != message.extends.name:
+            if message.extends is None or (len(message.properties) + len(message.messages)):
                 variable_type = f"List<{name}>"
             else:
                 variable_type = f"List<{message.extends.name}>"
             variable_name = camelcase(name) + "List"
         else:
-            if message.extends is None or len(
-                    message.properties) or name != message.extends.name:
+            if message.extends is None or (len(message.properties) + len(message.messages)):
                 variable_type = name
             else:
                 variable_type = message.extends.name

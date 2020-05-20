@@ -15,6 +15,7 @@ setuptools.setup(
     entry_points="""
     [console_scripts]
     app-entity=apptools.entity.cli:main
+    app-strings-remove=apptools.strings.remove.cli:main
     app-strings=apptools.strings.cli:main
     app-image=apptools.image.cli:main
     """,

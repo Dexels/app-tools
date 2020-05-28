@@ -58,10 +58,8 @@ def _write_service(writer: IndentedWriter, entity: Entity,
         dependencies.append("androidx.annotation.NonNull")
     if import_nullable:
         dependencies.append("androidx.annotation.Nullable")
-    if "GET" in entity.methods or "PUT" in entity.methods:
+    if "GET" in entity.methods or "PUT" in entity.methods or "POST" in entity.methods or "DELETE" in entity.methods:
         dependencies.append("io.reactivex.Single")
-    if "POST" in entity.methods or "DELETE" in entity.methods:
-        dependencies.append("io.reactivex.Completable")
     if entity.version != -1:
         dependencies.append("retrofit2.http.Headers")
     if "PUT" in entity.methods or "POST" in entity.methods:
@@ -110,10 +108,10 @@ def _write_service(writer: IndentedWriter, entity: Entity,
                 )
             if method == "DELETE":
                 indented_writer.writeln(
-                    f'Completable remove{entity.name}({parameters});')
+                    f'Single<{entity.name}> remove{entity.name}({parameters});')
             if method == "POST":
                 indented_writer.writeln(
-                    f'Completable insert{entity.name}({parameters}, @NonNull @Body {entity.name} {entity.name[0].lower() + entity.name[1:]});'
+                    f'Single<{entity.name}> insert{entity.name}({parameters}, @NonNull @Body {entity.name} {entity.name[0].lower() + entity.name[1:]});'
                 )
             indented_writer.newline()
 
@@ -133,10 +131,10 @@ def _write_service(writer: IndentedWriter, entity: Entity,
                     f'Single<{entity.name}> update{entity.name}(@NonNull @Body {entity.name} {entity.name[0].lower() + entity.name[1:]});'
                 )
             if method == "DELETE":
-                indented_writer.writeln(f'Completable remove{entity.name}();')
+                indented_writer.writeln(f'Single<{entity.name}> remove{entity.name}();')
             if method == "POST":
                 indented_writer.writeln(
-                    f'Completable insert{entity.name}(@NonNull @Body {entity.name} {entity.name[0].lower() + entity.name[1:]});'
+                    f'Single<{entity.name}> insert{entity.name}(@NonNull @Body {entity.name} {entity.name[0].lower() + entity.name[1:]});'
                 )
             indented_writer.newline()
 

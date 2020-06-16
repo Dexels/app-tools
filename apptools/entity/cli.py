@@ -10,6 +10,7 @@ from apptools.entity.arguments import parser as parent_parser
 
 from apptools.entity.writer import write
 from apptools.entity.java.writer import write as java_write
+from apptools.entity.kotlin.writer import write as kotlin_write
 from apptools.entity.swift.writer import write as swift_write
 from apptools.entity.typescript.writer import write as typescript_write
 
@@ -23,6 +24,9 @@ def main():
 
     java_parser = subparsers.add_parser(name="java", parents=[parent_parser])
     java_parser.set_defaults(writer=java_write)
+
+    kotlin_parser = subparsers.add_parser(name="kotlin", parents=[parent_parser])
+    kotlin_parser.set_defaults(writer=kotlin_write)
 
     swift_parser = subparsers.add_parser(name="swift", parents=[parent_parser])
     swift_parser.set_defaults(writer=swift_write)

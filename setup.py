@@ -1,8 +1,10 @@
 import setuptools
 
+from apptools.config import config
+
 setuptools.setup(
     name="App tools",
-    version="0.0.1",
+    version=config.VERSION,
     description="App tools",
     author="Dexelonian",
     author_email="info@dexels.com",

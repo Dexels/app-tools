@@ -103,13 +103,13 @@ def _write_datamodel_class(writer: IndentedWriter,
         type = sub_message.name
 
         if sub_message.is_array:
-            if sub_message.extends is None or len(sub_message.properties):
+            if sub_message.extends is None or len(sub_message.messages) or len(sub_message.properties):
                 interfaces.append(sub_message)
                 type = f"{name}[]"
             else:
                 type = f"{sub_message.extends.name}[]"
         else:
-            if sub_message.extends is None or len(sub_message.properties):
+            if sub_message.extends is None or len(sub_message.messages) or len(sub_message.properties):
                 interfaces.append(sub_message)
             else:
                 type = sub_message.extends.name
@@ -128,7 +128,7 @@ def _write_datamodel_class(writer: IndentedWriter,
         for variable in sorted(variables):
             writer.indented().writeln(variable)
 
-        writer.writeln("}")
+        writer.appendln("}")
     else:
         writer.appendln(" {}")
 

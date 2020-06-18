@@ -134,14 +134,14 @@ def _write_datamodel_class(writer: IndentedWriter,
         indented_writer = writer.indented()
 
         if sub_message.is_array:
-            if sub_message.extends is None or sub_message.properties or sub_message.name != sub_message.extends.name:
+            if sub_message.extends is None or sub_message.properties or sub_message.messages:
                 _write_datamodel_class(indented_writer, sub_message, prefix)
                 type = f"[{prefix}{sub_message.name}]"
             else:
                 type = f"[{sub_message.extends.name}]"
             name = f"{camelcase(sub_message.name)}List"
         else:
-            if sub_message.extends is None or sub_message.properties or sub_message.name != sub_message.extends.name:
+            if sub_message.extends is None or sub_message.properties or sub_message.messages:
                 _write_datamodel_class(indented_writer, sub_message, prefix)
                 type = prefix + sub_message.name
             else:
@@ -269,13 +269,13 @@ def _write_decoding(writer: IndentedWriter,
         variable_type = sub_message.name
 
         if sub_message.is_array:
-            if sub_message.extends is None or sub_message.properties or sub_message.name != sub_message.extends.name:
+            if sub_message.extends is None or sub_message.properties or sub_message.messages:
                 variable_type = f"[{prefix}{sub_message.name}]"
             else:
                 variable_type = f"[{sub_message.extends.name}]"
             variable_name += "List"
         else:
-            if sub_message.extends is None or sub_message.properties or sub_message.name != sub_message.extends.name:
+            if sub_message.extends is None or sub_message.properties or sub_message.messages:
                 variable_type = prefix + sub_message.name
             else:
                 variable_type = sub_message.extends.name
@@ -355,15 +355,13 @@ def _get_constructor_parameters(entity: Entity) -> List[Tuple[str, str]]:
     for message in entity.root.messages:
         name = message.name
         if message.is_array:
-            if message.extends is None or len(
-                    message.properties) > 0 or name != message.extends.name:
+            if message.extends is None or message.properties or message.messages:
                 type = f"[{name}]"
             else:
                 type = f"[{message.extends.name}]"
             name = camelcase(name) + "List"
         else:
-            if message.extends is None or len(
-                    message.properties) > 0 or name != message.extends.name:
+            if message.extends is None or message.properties or message.messages:
                 type = name
             else:
                 type = message.extends.name
@@ -414,7 +412,7 @@ def _write_logic(writer: IndentedWriter, entity: Entity) -> None:
 def _write_logic_class(writer: IndentedWriter, message: Message) -> None:
     writer.writeln(f"class {message.name}: {message.name}Entity {{")
     for message in message.messages:
-        if message.extends is None or message.properties or message.name != message.extends.name:
+        if message.extends is None or message.properties or message.messages:
             _write_logic_class(writer.indented(), message)
 
     if not message.messages:

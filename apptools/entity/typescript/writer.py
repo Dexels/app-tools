@@ -149,11 +149,15 @@ def _type(raw: str) -> str:
         return 'boolean'
     elif raw == 'date':
         return 'Date'
+    elif raw == 'timestamp':
+        return 'Date'
     elif raw == 'clocktime':
         return 'string'
     elif raw == 'float':
         return 'number'
     elif raw == 'binary':
         return 'string'
+    elif raw == 'money':
+        return 'number'
     else:
         return 'string'

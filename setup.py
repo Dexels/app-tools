@@ -1,8 +1,10 @@
 import setuptools
 
+from apptools.config import config
+
 setuptools.setup(
     name="App tools",
-    version="0.0.1",
+    version=config.VERSION,
     description="App tools",
     author="Dexelonian",
     author_email="info@dexels.com",
@@ -15,6 +17,7 @@ setuptools.setup(
     entry_points="""
     [console_scripts]
     app-entity=apptools.entity.cli:main
+    app-strings-remove=apptools.strings.remove.cli:main
     app-strings=apptools.strings.cli:main
     app-image=apptools.image.cli:main
     """,

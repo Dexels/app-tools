@@ -1,7 +1,9 @@
 import argparse
 import pathlib
 
-parser = argparse.ArgumentParser(add_help=False)
+from apptools.semver.arguments import parser as semver_parser
+
+parser = argparse.ArgumentParser(add_help=False, parents=[semver_parser])
 parser.add_argument("-u",
                     "--username",
                     help="username for the navajo user",

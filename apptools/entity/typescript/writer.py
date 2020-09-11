@@ -38,8 +38,18 @@ def _write_enum(writer: IndentedWriter, property: Property,
                 cases: List[str]) -> None:
     writer.writeln(
         f"export enum {property.name} {{")
+
     for case in cases:
-        writer.indented().writeln(f"{case} = '{case}',")
+        value = "'" + case + "'"
+        if case.isnumeric() or case.replace('.','',1).isdigit():
+            name = "'" + property.name + "_" + case + "'"
+            value = case
+        elif case.find(".") != -1:
+            name = "'" + case + "'"
+        else:
+            name = case
+
+        writer.indented().writeln(f"{name} = {value},")
 
     writer.writeln("}")
     writer.newline()

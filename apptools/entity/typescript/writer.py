@@ -4,7 +4,7 @@ import shutil
 
 from typing import List, Dict, Any, Tuple, Set
 
-from apptools.entity.navajo import Entity, Message
+from apptools.entity.navajo import Entity, Message, Property
 from apptools.entity.io import IndentedWriter
 from apptools.entity.text import camelcase, capitalize
 
@@ -26,6 +26,23 @@ def _write_entity(entity: Entity, output: pathlib.Path) -> None:
     with IndentedWriter(path=datamodel_class) as writer:
         _write_datamodel(writer, entity, output)
 
+def _write_enums(writer: IndentedWriter, message: Message) -> None:
+    for property in message.properties:
+        name = property.name
+        if property.enum is not None:
+            type = property.name
+
+            _write_enum(writer, property, property.enum)
+
+def _write_enum(writer: IndentedWriter, property: Property,
+                cases: List[str]) -> None:
+    writer.writeln(
+        f"export enum {property.name} {{")
+    for case in cases:
+        writer.indented().writeln(f"{case} = '{case}',")
+
+    writer.writeln("}")
+    writer.newline()
 
 def _write_datamodel(writer: IndentedWriter, entity: Entity,
                      output: pathlib.Path) -> None:
@@ -45,6 +62,7 @@ def _write_datamodel(writer: IndentedWriter, entity: Entity,
             writer.writeln(dependency_statement)
         writer.newline()
 
+    _write_enums(writer, entity.root)
     _write_datamodel_class(writer, entity.root)
 
 
@@ -86,7 +104,11 @@ def _write_datamodel_class(writer: IndentedWriter,
             continue
 
         name = property.name
-        type = _type(property.type)
+
+        if property.enum is not None:
+            type = property.name
+        else:
+            type = _type(property.type)
 
         variable = name
         variable += f": {type}"
@@ -138,7 +160,6 @@ def _write_datamodel_class(writer: IndentedWriter,
 
         for interface in interfaces:
             _write_datamodel_class(writer, interface)
-
 
 def _type(raw: str) -> str:
     if raw == 'integer':

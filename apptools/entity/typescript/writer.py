@@ -8,6 +8,7 @@ from apptools.entity.navajo import Entity, Message, Property
 from apptools.entity.io import IndentedWriter
 from apptools.entity.text import camelcase, capitalize
 
+
 def write(entities: List[Entity], options: Dict[str, Any]) -> None:
     output = options["output"]
     # Make sure to remove all previously generated files in correct folder
@@ -16,8 +17,10 @@ def write(entities: List[Entity], options: Dict[str, Any]) -> None:
     for entity in entities:
         _write_entity(entity, output)
 
+
 def remove_all(output: pathlib.Path) -> None:
     shutil.rmtree(output)
+
 
 def _write_entity(entity: Entity, output: pathlib.Path) -> None:
     datamodel = output / entity.package
@@ -25,6 +28,7 @@ def _write_entity(entity: Entity, output: pathlib.Path) -> None:
     datamodel_class = datamodel / f"{entity.name}.ts"
     with IndentedWriter(path=datamodel_class) as writer:
         _write_datamodel(writer, entity, output)
+
 
 def _write_enums(writer: IndentedWriter, message: Message) -> None:
     for property in message.properties:
@@ -34,6 +38,10 @@ def _write_enums(writer: IndentedWriter, message: Message) -> None:
 
             _write_enum(writer, property, property.enum)
 
+    for sub_message in message.messages:
+        _write_enums(writer, sub_message)
+
+
 def _write_enum(writer: IndentedWriter, property: Property,
                 cases: List[str]) -> None:
     writer.writeln(
@@ -41,7 +49,7 @@ def _write_enum(writer: IndentedWriter, property: Property,
 
     for case in cases:
         value = "'" + case + "'"
-        if case.isnumeric() or case.replace('.','',1).isdigit():
+        if case.isnumeric() or case.replace('.', '', 1).isdigit():
             name = "'" + property.name + "_" + case + "'"
             value = case
         elif case.find(".") != -1:
@@ -53,6 +61,7 @@ def _write_enum(writer: IndentedWriter, property: Property,
 
     writer.writeln("}")
     writer.newline()
+
 
 def _write_datamodel(writer: IndentedWriter, entity: Entity,
                      output: pathlib.Path) -> None:
@@ -116,7 +125,7 @@ def _write_datamodel_class(writer: IndentedWriter,
         name = property.name
 
         if property.enum is not None:
-            type = property.name
+            type = name
         else:
             type = _type(property.type)
 
@@ -164,12 +173,12 @@ def _write_datamodel_class(writer: IndentedWriter,
     else:
         writer.appendln(" {}")
 
-
     if interfaces:
         writer.newline()
 
         for interface in interfaces:
             _write_datamodel_class(writer, interface)
+
 
 def _type(raw: str) -> str:
     if raw == 'integer':

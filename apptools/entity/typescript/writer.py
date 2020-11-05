@@ -151,6 +151,8 @@ def _type(raw: str) -> str:
         return 'Date'
     elif raw == 'clocktime':
         return 'string'
+    elif raw == 'double':
+        return 'number'
     elif raw == 'float':
         return 'number'
     elif raw == 'binary':

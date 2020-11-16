@@ -20,7 +20,7 @@ class Spec(object):
     def load_from_json(cls, json):
         project = json_get('project', json)
 
-        shared_path = os.path.join("~/git/", json_get('shared', json))
+        shared_path = os.path.join("../", json_get('shared', json))
 
         return cls(shared_path, project, [
             Platform.load_from_json(platform, project)

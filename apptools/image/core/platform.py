@@ -30,7 +30,7 @@ class Platform(object):
         name = json_get('name', json)
         repository = json_get('repository', json)
 
-        path = "~/git/%s" % repository
+        path = "../%s" % repository
 
         return cls(name, path, [
             Scale.load_from_json(scale) for scale in json_get('scales', json)

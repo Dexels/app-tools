@@ -694,6 +694,8 @@ def _capitalize_path(path: pathlib.Path) -> pathlib.Path:
 def _swift_type(type: str) -> str:
     if type == 'integer':
         return 'Int'
+    if type == 'long':
+        return 'Int64'
     elif type == 'string':
         return 'String'
     elif type == 'boolean':

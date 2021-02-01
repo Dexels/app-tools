@@ -422,6 +422,8 @@ def _package(path: pathlib.Path, start: str = None) -> str:
 def _java_type(entity_type: str) -> str:
     if entity_type == "integer":
         return "Integer"
+    elif entity_type == "long":
+        return "Long"
     elif entity_type == "string":
         return "String"
     elif entity_type == "boolean":

@@ -166,7 +166,7 @@ def _write_datamodel_class(writer: IndentedWriter,
     # When there are no variables, then just render an empty interface, but with {} on 1 line
     if variables:
         writer.appendln(" {")
-        for variable in sorted(variables, key=lambda x: x: x.split(":")[0]):
+        for variable in sorted(variables, key=lambda x: x.split(":")[0]):
             writer.indented().writeln(variable)
 
         writer.appendln("}")

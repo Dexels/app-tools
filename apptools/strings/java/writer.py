@@ -23,11 +23,11 @@ def write(strings: Dict[str, Dict[str, str]], options: Options):
             comment = strings[key].get("comment")
             if comment:
                 fp.write(
-                    f"\n\t<!-- {comment} -->\n"
+                    f"\n    <!-- {comment} -->\n"
                 )
 
             fp.write(
-                f"\t<string name=\"{key}\" formatted=\"false\">\"{escaped_value}\"</string>\n"
+                f"    <string name=\"{key}\" formatted=\"false\">\"{escaped_value}\"</string>\n"
             )
 
         fp.write('</resources>\n')

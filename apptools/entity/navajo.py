@@ -31,6 +31,7 @@ class Message(object):
         self.properties = properties
         self.messages = messages
         self.extends = extends
+        self.is_non_empty = (len(properties) + len(messages))
 
 
 class Entity(object):

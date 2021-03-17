@@ -18,6 +18,9 @@ class Network(object):
         return XML(response)
 
     def data(self, path) -> str:
+        # We are sending a request to an entity file which basically returns
+        # all the content of that file backs to us. This will not execute the
+        # entity but instead run the file as a navascript call.
         return f'''
             <tml documentImplementation="SAXP">
                 <header>

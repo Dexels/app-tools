@@ -46,11 +46,18 @@ def distribute(spec, only_for_platform, overwrites):
                     destination_directory_path = join(platform.path, target.assets,
                                                       scale.directory)
                     print(f'Deleting directory {destination_directory_path}')
-                    rmtree(destination_directory_path)
+                    try:
+                        rmtree(destination_directory_path)
+                    except:
+                        print('Deleting failed')
+
                 elif platform.is_ios():
                     asset_directory_path = join(platform.path, target.assets)
                     print(f'Deleting directory {asset_directory_path}')
-                    rmtree(asset_directory_path)
+                    try:
+                        rmtree(asset_directory_path)
+                    except:
+                        print('Deleting failed')
                     makedirs(asset_directory_path)
 
     jobs = []

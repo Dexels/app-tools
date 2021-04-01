@@ -4,6 +4,7 @@ from json import dump
 from os import makedirs
 from os.path import join
 from shutil import copyfile
+from shutil import rmtree
 
 from apptools.image.core.color import hex_to_rgba
 from apptools.image.core.imagetype import ImageType
@@ -34,6 +35,30 @@ def distribute(spec, only_for_platform, overwrites):
                         setattr(obj, path, value)
                     else:
                         obj = getattr(obj, component)
+    # clear directories
+    for platform in spec.platforms:
+        if only_for_platform is not None and only_for_platform != platform.name:
+            print(f'Skip for platform {platform}')
+            continue
+        for target in platform.targets:
+            for scale in platform.scales:
+                if platform.is_android():
+                    destination_directory_path = join(platform.path, target.assets,
+                                                      scale.directory)
+                    print(f'Deleting directory {destination_directory_path}')
+                    try:
+                        rmtree(destination_directory_path)
+                    except:
+                        print('Deleting failed')
+
+                elif platform.is_ios():
+                    asset_directory_path = join(platform.path, target.assets)
+                    print(f'Deleting directory {asset_directory_path}')
+                    try:
+                        rmtree(asset_directory_path)
+                    except:
+                        print('Deleting failed')
+                    makedirs(asset_directory_path)
 
     jobs = []
     for image in spec.images:

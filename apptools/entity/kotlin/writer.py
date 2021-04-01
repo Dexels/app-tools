@@ -1,6 +1,6 @@
 import pathlib
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Set
 
 from apptools.entity.navajo import Entity, Message
 from apptools.entity.io import IndentedWriter
@@ -26,15 +26,19 @@ def _write_entity(entity: Entity, output: pathlib.Path, package: str) -> None:
     datamodel = output / entity.package / "datamodel"
     datamodel.mkdir(parents=True, exist_ok=True)
     datamodel_class = datamodel / f"{entity.name}Entity.kt"
+    import_list = None
     with IndentedWriter(path=datamodel_class) as writer:
-        _write_datamodel(writer, entity, output, package)
+        import_list = _write_datamodel(writer, entity, output, package, None)
+    with IndentedWriter(path=datamodel_class) as writer:
+        _write_datamodel(writer, entity, output, package, import_list)
 
-    # logic = output / entity.package / "logic"
-    # logic.mkdir(parents=True, exist_ok=True)
-    # logic_class = logic / f"{entity.name}.kt"
-    # if not logic_class.exists():
-    #    with IndentedWriter(path=logic_class) as writer:
-    #        _write_logic(writer, entity, package)
+
+    logic = output / entity.package / "logic"
+    logic.mkdir(parents=True, exist_ok=True)
+    logic_class = logic / f"{entity.name}.kt"
+    if not logic_class.exists():
+        with IndentedWriter(path=logic_class) as writer:
+            _write_logic(writer, entity, package)
 
 
 def _write_service(writer: IndentedWriter, entity: Entity,
@@ -129,33 +133,38 @@ def _write_service(writer: IndentedWriter, entity: Entity,
 
 
 def _write_datamodel(writer: IndentedWriter, entity: Entity,
-                     output: pathlib.Path, package: str) -> None:
+                     output: pathlib.Path, package: str, import_list: Set) -> None:
     writer.writeln(f"package {package}.{_package(entity.package)}.datamodel")
 
     writer.newline()
 
-    import_list = [
-        "com.google.gson.annotations.SerializedName",
-        "java.io.Serializable",
-        f"{package}.{_package(entity.package)}.logic." + entity.name
-    ]
+    if import_list is not None:
+        import_list.update({
+            "java.io.Serializable"
+        })
 
-    for superclass in _get_superclasses(entity.root):
-        import_list.append(f"{package}.{_package(superclass.package)}.logic." +
-                           superclass.name)
+        for dependency in _get_dependencies(entity):
+            import_list.add(f"{package}.{_package(dependency.package)}.logic." +
+                               dependency.name)
 
-    for import_item in sorted(set(import_list)):
-        writer.writeln(f"import {import_item}")
+
+        for import_item in sorted(import_list):
+            writer.writeln(f"import {import_item}")
+    else:
+        import_list = set()
 
     writer.newline()
 
-    _write_datamodel_class(writer, entity.root)
+    import_list = _write_datamodel_class(writer, entity.root, import_list)
+
+    return import_list
 
 
 def _write_datamodel_class(writer: IndentedWriter,
                            message: Message,
+                           import_list: Set,
                            prefix: str = '') -> None:
-    writer.append(f"open class {message.name}Entity")
+    writer.write(f"open class {message.name}Entity")
 
     prefix += message.name + "."
 
@@ -190,6 +199,7 @@ def _write_datamodel_class(writer: IndentedWriter,
         else:
             nonnull_variables.append((name, variable_name, variable_type))
 
+    indented_writer = writer.indented()
     for submessage in message.messages:
         name = submessage.name
         nullable = submessage.nullable
@@ -215,57 +225,65 @@ def _write_datamodel_class(writer: IndentedWriter,
         else:
             nonnull_variables.append((name, variable_name, variable_type))
 
-    writer.appendln("(")
+    if (len(super_variables) or len(nonnull_variables)):
+        writer.appendln("(")
 
-    indented_writer = writer.indented()
-    if (len(super_variables)):
-        for variable, has_more in lookahead(super_variables):
-            indented_writer.write(f'{variable[0]}: {variable[1]}')
-            if has_more or len(nonnull_variables):
-                writer.writeln(',')
-            else:
-                writer.appendln('')
+        if (len(super_variables)):
+            for variable, has_more in lookahead(super_variables):
+                indented_writer.write(f'{variable[0]}: {variable[1]}')
+                if has_more or len(nonnull_variables):
+                    writer.appendln(',')
+                else:
+                    writer.appendln('')
 
-    if (len(nonnull_variables)):
-        for variable, has_more in lookahead(nonnull_variables):
-            indented_writer.write(f'@field:JvmField @field:SerializedName("{variable[0]}") var {variable[1]}: {variable[2]}')
-            if has_more:
-                writer.writeln(',')
-            else:
-                writer.writeln('')
+        if (len(nonnull_variables)):
+            for variable, has_more in lookahead(nonnull_variables):
+                import_list.add("com.google.gson.annotations.SerializedName")
+                indented_writer.write(f'@field:JvmField @field:SerializedName("{variable[0]}") var {variable[1]}: {variable[2]}')
+                if has_more:
+                    writer.appendln(',')
+                else:
+                    writer.appendln('')
+        writer.write(")")
 
     if message.extends is not None:
-        indented_writer.appendln(f") : {message.extends.name}(")
+        writer.append(f" : {message.extends.name}")
         if len(super_variables):
+            writer.appendln("(")
             for variable, has_more in lookahead(super_variables):
                 indented_writer.write(f'{variable[0]}')
                 if has_more:
-                    writer.writeln(',')
+                    writer.appendln(',')
                 else:
-                    writer.writeln('')
-        indented_writer.appendln("), Serializable {")
+                    writer.appendln('')
+            writer.write("), Serializable")
     else:
-        indented_writer.appendln(") : Serializable {")
+        writer.append(" : Serializable")
 
-    writer.newline()
-
-    for inner_class in inner_classes:
-        _write_datamodel_class(indented_writer, inner_class[0], inner_class[1])
-
-    for enum in enums:
-        indented_writer.writeln(f"enum class {enum[0]} {{")
-        indented_writer.indented().writeln(f'{", ".join(enum[1])}')
-        indented_writer.writeln(f"}}")
+    if (len(inner_classes) or len(enums) or len(nullable_variables)):
+        writer.appendln(" {")
         writer.newline()
 
-    for variable in nullable_variables:
-        indented_writer.writeln(f"@JvmField")
-        indented_writer.writeln(f'@SerializedName("{variable[0]}")')
-        indented_writer.writeln(f"var {variable[1]}: {variable[2]} = null")
-        writer.newline()
+        for inner_class in inner_classes:
+            import_list.update(_write_datamodel_class(indented_writer, inner_class[0], import_list, inner_class[1]))
 
-    writer.writeln("}")
+        for enum in enums:
+            indented_writer.writeln(f"enum class {enum[0]} {{")
+            indented_writer.indented().writeln(f'{", ".join(enum[1])}')
+            indented_writer.writeln(f"}}")
+            writer.newline()
+
+        for variable in nullable_variables:
+            indented_writer.writeln(f"@JvmField")
+            import_list.add("com.google.gson.annotations.SerializedName")
+            indented_writer.writeln(f'@SerializedName("{variable[0]}")')
+            indented_writer.writeln(f"var {variable[1]}: {variable[2]} = null")
+            writer.newline()
+
+        writer.writeln("}")
     writer.newline()
+
+    return import_list
 
 
 def _write_logic(writer: IndentedWriter, entity: Entity, package: str) -> None:
@@ -274,13 +292,12 @@ def _write_logic(writer: IndentedWriter, entity: Entity, package: str) -> None:
     writer.newline()
 
     import_list = [
-        f"{package}.{_package(entity.package)}.datamodel.{entity.name}Entity",
-        f"java.io.Serializable"
+        f"{package}.{_package(entity.package)}.datamodel.{entity.name}Entity"
     ]
 
-    for superclass in _get_superclasses(entity.root):
-        import_list.append(f"{package}.{_package(superclass.package)}.logic." +
-                           superclass.name)
+    for dependency in _get_dependencies(entity, True):
+        import_list.append(f"{package}.{_package(dependency.package)}.logic." +
+                           dependency.name)
 
     for import_item in sorted(set(import_list)):
         writer.writeln(f"import {import_item}")
@@ -291,42 +308,50 @@ def _write_logic(writer: IndentedWriter, entity: Entity, package: str) -> None:
 
 
 def _write_logic_class(writer: IndentedWriter, message: Message) -> None:
-    writer.write("public")
+    writer.write(f"open class {message.name}")
 
-    writer.appendln(f" class {message.name} extends {message.name}Entity {{")
-    writer.newline()
+    super_variables = _get_super_variables(message)
 
     indented_writer = writer.indented()
 
-    super_variables = _get_super_variables(message)
-    super_variables_string = []
-    super_arguments_string = []
+    if (len(super_variables)):
+        writer.appendln("(")
+        for constructor_parameter in super_variables:
+            name = constructor_parameter[0]
+            type = constructor_parameter[1]
+            indented_writer.writeln(f'{name}: {type},')
 
-    for constructor_parameter in super_variables:
-        name = constructor_parameter[0]
-        type = constructor_parameter[1]
+        writer.writeln(f") : {message.name}Entity(")
+        for constructor_parameter in super_variables:
+            name = constructor_parameter[0]
+            indented_writer.writeln(f'{name},') #last one without comma
+        writer.write(f")")
+    else:
+        writer.appendln(f" : {message.name}Entity()")
 
-        super_variables_string.append(f'{name}: {type}')
-        super_arguments_string.append(f'{name}')
+    if (len(message.messages)):
+        hasSubClass = False
+        for submessage in message.messages:
+            name = submessage.name
 
-    indented_writer.writeln(
-        f'public {message.name}({", ".join(super_variables_string)}) {{'
-    )
-    indented_writer.indented().writeln(
-        f'super({", ".join(super_arguments_string)});')
-    indented_writer.writeln("}")
-
-    for submessage in message.messages:
-        name = submessage.name
-
-        if submessage.is_array:
-            if submessage.extends is None or submessage.properties or submessage.messages:
-                _write_logic_class(indented_writer, submessage)
+            if submessage.is_array:
+                if submessage.extends is None or submessage.properties or submessage.messages:
+                    if not hasSubClass:
+                        writer.appendln(" {")
+                        hasSubClass = True
+                    _write_logic_class(indented_writer, submessage)
+            else:
+                if submessage.extends is None or (len(submessage.properties) + len(submessage.messages)):
+                    if not hasSubClass:
+                        writer.appendln(" {")
+                        hasSubClass = True
+                    _write_logic_class(indented_writer, submessage)
+        if hasSubClass:
+            writer.writeln("}")
         else:
-            if submessage.extends is None or (len(submessage.properties) + len(submessage.messages)):
-                _write_logic_class(indented_writer, submessage)
-
-    writer.writeln(f"}}")
+            writer.writeln("")
+    else:
+        writer.writeln("")
 
 
 def _get_super_variables(message: Message):
@@ -370,16 +395,71 @@ def _get_super_variables(message: Message):
     return super_variables
 
 
-def _get_superclasses(message: Message):
-    superclasses = []
-    if message.extends is not None:
-        superclasses.append(message.extends)
-        superclasses += _get_superclasses(message.extends.root)
+# dependencies of an entity
+# - the direct parent logic file (for extends) "A extends B"
 
-    for message in message.messages:
-        superclasses += _get_superclasses(message)
+# - the logic file itself (in case of inner classes)
+#   - parent logic files of inner classes
 
-    return superclasses
+# - all (in)direct top level nonnull messages that extend an entity and keep same name (for constructor) A(X x){super(x)}
+def _get_constructor_dependencies(entity: Entity):
+    dependencies = []
+    if entity.root.extends is not None:
+        dependencies += _get_constructor_dependencies(entity.root.extends)
+
+    for message in entity.root.messages:
+        if message.nullable:
+            continue
+        if message.extends is not None:
+            if message.extends.name != message.name and message.is_non_empty:
+                dependencies.append(entity)
+            else:
+                dependencies.append(message.extends)
+        else:
+            dependencies.append(entity)
+    return dependencies
+
+def _get_variable_dependencies(entity: Entity, root: Message, logic: bool = False):
+    dependencies = []
+    for message in root.messages:
+        if message.nullable and logic:
+            continue
+
+        if message.extends is not None:
+            if message.extends.name != message.name and message.is_non_empty:
+                # we will have an inner class for this variable
+                if not logic:
+                    dependencies.append(message.extends)
+                    dependencies.append(entity)
+                    dependencies += _get_constructor_dependencies(message.extends)
+            else:
+                dependencies.append(message.extends)
+        else:
+            # we will have an inner class for this variable
+            if not logic:
+                dependencies.append(entity)
+        for submessage in message.messages:
+            if submessage.nullable and logic:
+                continue
+            if submessage.extends is not None:
+                dependencies.append(submessage.extends)
+                if submessage.extends.name != submessage.name and submessage.is_non_empty:
+                    dependencies += _get_variable_dependencies(submessage.extends, submessage.extends.root, logic)
+                    dependencies += _get_variable_dependencies(submessage.extends, submessage, logic)
+            else:
+                dependencies += _get_variable_dependencies(entity, submessage, logic)
+    return dependencies
+
+
+def _get_dependencies(entity: Entity, logic: bool = False):
+    dependencies = []
+    if entity.root.extends is not None:
+        dependencies.append(entity.root.extends)
+        dependencies += _get_constructor_dependencies(entity.root.extends)
+
+    dependencies += _get_variable_dependencies(entity, entity.root, logic)
+
+    return dependencies
 
 
 def _package(path: pathlib.Path, start: str = None) -> str:
@@ -398,6 +478,8 @@ def _package(path: pathlib.Path, start: str = None) -> str:
 def _kotlin_type(entity_type: str) -> str:
     if entity_type == "integer":
         return "Int"
+    elif entity_type == "long":
+        return "Long"
     elif entity_type == "string":
         return "String"
     elif entity_type == "boolean":

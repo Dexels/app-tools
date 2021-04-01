@@ -12,7 +12,7 @@ setuptools.setup(
     package_data={
         '': ['xcode.rb'],
     },
-    install_requires=["cairosvg~=2.1.3"],
+    install_requires=["cairosvg~=2.5.1"],
     python_requires=">=3.7",
     entry_points="""
     [console_scripts]

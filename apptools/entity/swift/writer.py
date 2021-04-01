@@ -7,8 +7,6 @@ from apptools.entity.navajo import Entity, Message, Property
 from apptools.entity.io import IndentedWriter
 from apptools.entity.text import camelcase, capitalize
 
-# TODO: Remove Alamofire prefix
-# TODO: Service struct should be an enum, meaning we cannot instantiate it and we can remove the private initializer.
 # TODO: Use Swiftlints marker to disable all linting on generated files.
 
 reserved_words = [
@@ -428,7 +426,7 @@ def _write_service(writer: IndentedWriter, entity: Entity) -> None:
     writer.newline()
     writer.writeln(f"import Alamofire")
     writer.newline()
-    writer.writeln(f"struct {entity.name}Service {{")
+    writer.writeln(f"enum {entity.name}Service {{")
 
     indented_writer = writer.indented()
 
@@ -438,9 +436,6 @@ def _write_service(writer: IndentedWriter, entity: Entity) -> None:
     indented_writer.indented().writeln(
         f'"X-Navajo-Version": "{max(entity.version, 0)}"')
     indented_writer.writeln("]")
-
-    indented_writer.newline()
-    indented_writer.writeln("private init() { }")
 
     writer.newline()
 
@@ -519,7 +514,7 @@ def _write_service_get(writer: IndentedWriter,
     indented_writer.newline()
 
     indented_writer.writeln(
-        "let encoding = Alamofire.URLEncoding(destination: .queryString, boolEncoding: .literal)"
+        "let encoding = URLEncoding(destination: .queryString, boolEncoding: .literal)"
     )
     indented_writer.writeln(
         "let input = ParameterInputEncoding(encoding: encoding, parameters: parameters)"
@@ -560,7 +555,7 @@ def _write_service_put(writer: IndentedWriter,
     indented_writer.newline()
 
     indented_writer.writeln(
-        "let encoding = Alamofire.URLEncoding(destination: .queryString, boolEncoding: .literal)"
+        "let encoding = URLEncoding(destination: .queryString, boolEncoding: .literal)"
     )
     indented_writer.writeln(
         "let parameterInputEncoding = ParameterInputEncoding(encoding: encoding, parameters: parameters)"
@@ -586,11 +581,11 @@ def _write_service_post(writer: IndentedWriter,
                         optional_properties: List[Property] = []) -> None:
     if parameters:
         writer.writeln(
-            f"static func insert({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> Operation {{"
+            f"static func insert({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> JSONDecodableOperation<{entity.name}> {{"
         )
     else:
         writer.writeln(
-            f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> Operation {{"
+            f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> JSONDecodableOperation<{entity.name}> {{"
         )
 
     indented_writer = writer.indented()
@@ -604,7 +599,7 @@ def _write_service_post(writer: IndentedWriter,
     indented_writer.newline()
 
     indented_writer.writeln(
-        "let encoding = Alamofire.URLEncoding(destination: .queryString, boolEncoding: .literal)"
+        "let encoding = URLEncoding(destination: .queryString, boolEncoding: .literal)"
     )
     indented_writer.writeln(
         "let parameterInputEncoding = ParameterInputEncoding(encoding: encoding, parameters: parameters)"
@@ -616,7 +611,7 @@ def _write_service_post(writer: IndentedWriter,
     indented_writer.newline()
 
     indented_writer.writeln(
-        f'return PlainOperation(path: path, method: .post, headers: headers, input: input)'
+        f'return JSONDecodableOperation(path: path, method: .post, headers: headers, input: input, output: {entity.name}.self)'
     )
 
     writer.writeln("}")
@@ -629,7 +624,7 @@ def _write_service_delete(writer: IndentedWriter,
                           required_properties: List[Property] = [],
                           optional_properties: List[Property] = []) -> None:
     writer.writeln(
-        f"static func remove({', '.join(parameters)}) -> Operation {{")
+        f"static func remove({', '.join(parameters)}) -> JSONDecodableOperation<{entity.name}> {{")
 
     indented_writer = writer.indented()
 
@@ -642,7 +637,7 @@ def _write_service_delete(writer: IndentedWriter,
     indented_writer.newline()
 
     indented_writer.writeln(
-        "let encoding = Alamofire.URLEncoding(destination: .queryString, boolEncoding: .literal)"
+        "let encoding = URLEncoding(destination: .queryString, boolEncoding: .literal)"
     )
     indented_writer.writeln(
         "let input = ParameterInputEncoding(encoding: encoding, parameters: parameters)"
@@ -651,7 +646,7 @@ def _write_service_delete(writer: IndentedWriter,
     indented_writer.newline()
 
     indented_writer.writeln(
-        f'return PlainOperation(path: path, method: .delete, headers: headers, input: input)'
+        f"return JSONDecodableOperation(path: path, method: .delete, headers: headers, input: input, output: {entity.name}.self)"
     )
 
     writer.writeln("}")
@@ -694,6 +689,8 @@ def _capitalize_path(path: pathlib.Path) -> pathlib.Path:
 def _swift_type(type: str) -> str:
     if type == 'integer':
         return 'Int'
+    if type == 'long':
+        return 'Int64'
     elif type == 'string':
         return 'String'
     elif type == 'boolean':

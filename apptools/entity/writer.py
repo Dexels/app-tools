@@ -114,7 +114,7 @@ def _entity(input: pathlib.Path, path: pathlib.Path, element: Element,
     version = _version(name, element)
     root = _root(name, version, element)
     methods = _methods(element)
-    message = _message(input, root, mappings)
+    message = _message(input, path, root, mappings)
     package = _package(input, path, name)
 
     return Entity(name, path, package, version, methods, message)
@@ -166,7 +166,7 @@ def _package(input: pathlib.Path, path: pathlib.Path,
     return pathlib.Path(*package).parent
 
 
-def _message(input: pathlib.Path, element: Element,
+def _message(input: pathlib.Path, path: pathlib.Path, element: Element,
              mappings: Mapping[pathlib.Path, Element]) -> Message:
     name = element.get("name").split(".")[0]
     is_array = element.get("type") == "array"
@@ -186,14 +186,17 @@ def _message(input: pathlib.Path, element: Element,
         extends_raw = element.get("extends")
 
     properties = [_property(property) for property in properties_raw]
-    messages = [_message(input, message, mappings) for message in messages_raw]
+    messages = [_message(input, path, message, mappings) for message in messages_raw]
 
     parent: Optional[Entity] = None
     if extends_raw is not None:
         extends = _extends(extends_raw)
-
         extension = pathlib.Path("entity", *extends.path.parts)
+
         parent = _entity(input, extension, mappings[extension], mappings)
+
+
+        assert extends.name.version == parent.version, f"Version error: Entity at {path} includes an extension of {parent.name} with version {extends.name.version}, but should be {parent.version}"
 
     return Message(name, is_array, nullable, properties, messages, parent)
 
@@ -272,7 +275,7 @@ Extends = NamedTuple("Extends", [("name", Name), ("path", pathlib.Path)])
 def _extends(raw: str) -> Extends:
     components = urllib.parse.urlparse(raw)
     path = pathlib.Path(components.netloc) / pathlib.Path(components.path[1:])
-    name = _name(path.stem)
+    name = _name(path.name)
     path = path.with_name(name.base)
 
     return Extends(name, path)

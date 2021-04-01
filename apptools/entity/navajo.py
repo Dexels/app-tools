@@ -31,6 +31,7 @@ class Message(object):
         self.properties = properties
         self.messages = messages
         self.extends = extends
+        self.is_non_empty = (len(properties) + len(messages))
 
 
 class Entity(object):
@@ -59,11 +60,11 @@ class Entity(object):
     def key_ids(self) -> List[str]:
         result: List[str] = []
 
+        if self.root.extends is not None:
+            result += self.root.extends.key_ids
         for property in self.root.properties:
             if property.is_key:
                 for key in property.key_ids:
                     if not key in result:
                         result.append(key)
-        if self.root.extends is not None:
-            result += self.root.extends.key_ids
         return result

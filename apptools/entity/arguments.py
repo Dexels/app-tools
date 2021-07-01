@@ -32,3 +32,13 @@ parser.add_argument("-e",
                     help="Only these entities",
                     required=False,
                     action='append')
+parser.add_argument("-f",
+                    "--force",
+                    help="Force code generation, even if logic files exist",
+                    required=False,
+                    action='store_true')
+parser.add_argument("-d",
+                    "--debug",
+                    help="Add debug info to generated code",
+                    required=False,
+                    action='store_true')

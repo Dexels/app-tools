@@ -22,7 +22,8 @@ class Property(object):
 class Message(object):
     def __init__(self, name: str, is_array: bool, nullable: bool,
                  properties: List[Property], messages: List["Message"],
-                 extends: Optional["Entity"]):
+                 extends: List["Entity"], interfaces: List["Entity"], 
+                 is_interface: bool):
         super().__init__()
 
         self.name = name
@@ -31,12 +32,17 @@ class Message(object):
         self.properties = properties
         self.messages = messages
         self.extends = extends
-        self.is_non_empty = (len(properties) + len(messages))
+        self.interfaces = interfaces
+        self.is_interface = is_interface
+        self.is_non_empty = (len(properties) + len(messages) + len(interfaces))
+
+    def __eq__(self, other):
+        return True
 
 
 class Entity(object):
     def __init__(self, name: str, path: pathlib.Path, package: pathlib.Path,
-                 version: int, methods: List[str], root: Message) -> None:
+                 version: int, methods: List[str], root: Message, query: str) -> None:
         super().__init__()
 
         self.name = name
@@ -45,6 +51,7 @@ class Entity(object):
         self.version = version
         self.methods = methods
         self.root = root
+        self.query = query
 
     def key_properties(self, key_id) -> List[Property]:
         result = []
@@ -52,16 +59,16 @@ class Entity(object):
         for property in self.root.properties:
             if property.is_key and key_id in property.key_ids:
                 result.append(property)
-        if self.root.extends is not None:
-            result += self.root.extends.key_properties(key_id)
+        if len(self.root.extends) == 1 and not self.root.extends[0].query:
+            result += self.root.extends[0].key_properties(key_id)
         return result
 
     @property
     def key_ids(self) -> List[str]:
         result: List[str] = []
 
-        if self.root.extends is not None:
-            result += self.root.extends.key_ids
+        if len(self.root.extends) == 1:
+            result += self.root.extends[0].key_ids
         for property in self.root.properties:
             if property.is_key:
                 for key in property.key_ids:

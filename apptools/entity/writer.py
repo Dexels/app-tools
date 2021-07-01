@@ -80,16 +80,32 @@ def _fetch(paths: Set[pathlib.Path], username: str,
                 extends = message.get("extends")
                 if extends is None:
                     continue
-
-                extension = pathlib.Path("entity",
-                                         *_extends(extends).path.parts)
-                extensions.add(extension)
+                extends = extends.removeprefix("navajo://")
+                for extends_item in extends.split(","):
+                    extension = pathlib.Path("entity",
+                                         *_extends(extends_item).path.parts)
+                    extensions.add(extension)
 
             if root.get("extends") is not None:
                 extends = root.get("extends")
-                extension = pathlib.Path("entity",
-                                         *_extends(extends).path.parts)
-                extensions.add(extension)
+                extends = extends.removeprefix("navajo://")
+                for extends_item in extends.split(","):
+                    extension = pathlib.Path("entity",
+                                         *_extends(extends_item).path.parts)
+                    extensions.add(extension)
+
+            for message in root.findall(".//message[@subtype]"):
+                interfaces = _get_message_interfaces(message.get("subtype"))
+                if interfaces is not None:
+                    for interface in interfaces:
+                        extension = pathlib.Path("entity", interface)
+                        extensions.add(extension)
+            
+            interfaces = _get_message_interfaces(root.get("subtype"))
+            if interfaces is not None:
+                for interface in interfaces:
+                    extension = pathlib.Path("entity", interface)
+                    extensions.add(extension)
 
             fetch(extensions)
 
@@ -101,13 +117,13 @@ def _fetch(paths: Set[pathlib.Path], username: str,
 def _entities(input: pathlib.Path, mappings: Mapping[pathlib.Path,
                                                      Element]) -> List[Entity]:
     return [
-        _entity(input, path, element, mappings)
+        _entity(input, path, element, mappings, None)
         for path, element in mappings.items()
     ]
 
 
 def _entity(input: pathlib.Path, path: pathlib.Path, element: Element,
-            mappings: Mapping[pathlib.Path, Element]) -> Entity:
+            mappings: Mapping[pathlib.Path, Element], query: str) -> Entity:
     print(f"Parsing {path}")
 
     name = path.stem
@@ -117,7 +133,7 @@ def _entity(input: pathlib.Path, path: pathlib.Path, element: Element,
     message = _message(input, path, root, mappings)
     package = _package(input, path, name)
 
-    return Entity(name, path, package, version, methods, message)
+    return Entity(name, path, package, version, methods, message, query)
 
 
 def _version(name: str, element: Element) -> int:
@@ -181,6 +197,7 @@ def _message(input: pathlib.Path, path: pathlib.Path, element: Element,
         messages_raw = element.findall("message[@type='definition']/message")
         extends_raw = definition.get("extends")
     else:
+        definition = element
         properties_raw = element.findall("./property")
         messages_raw = element.findall("./message")
         extends_raw = element.get("extends")
@@ -188,17 +205,31 @@ def _message(input: pathlib.Path, path: pathlib.Path, element: Element,
     properties = [_property(property) for property in properties_raw]
     messages = [_message(input, path, message, mappings) for message in messages_raw]
 
-    parent: Optional[Entity] = None
+    is_interface = _is_message_interface(definition.get("subtype"))
+    interfaces = _get_message_interfaces(definition.get("subtype"))
+    super_interfaces: List[Entity] = []
+    if interfaces is not None:
+        for interface in interfaces:
+            extends = _extends(interface)
+            extension = pathlib.Path("entity", *extends.path.parts)
+            # extension = pathlib.Path("entity", interface)
+            super_interface = _entity(input, extension, mappings[extension], mappings, extends.query)
+            super_interfaces.append(super_interface)
+
+            assert extends.name.version == super_interface.version, f"Version error: Entity at {path} includes an interface of {parent.name} with version {extends.name.version}, but should be {parent.version}"
+
+    parents: List[Entity] = []
     if extends_raw is not None:
-        extends = _extends(extends_raw)
-        extension = pathlib.Path("entity", *extends.path.parts)
+        extends_raw = extends_raw.removeprefix("navajo://")
+        for extends_item in extends_raw.split(","):
+            extends = _extends(extends_item)
+            extension = pathlib.Path("entity", *extends.path.parts)
+            parent = _entity(input, extension, mappings[extension], mappings, extends.query)
+            parents.append(parent)
 
-        parent = _entity(input, extension, mappings[extension], mappings)
+            assert extends.name.version == parent.version, f"Version error: Entity at {path} includes an extension of {parent.name} with version {extends.name.version}, but should be {parent.version}"
 
-
-        assert extends.name.version == parent.version, f"Version error: Entity at {path} includes an extension of {parent.name} with version {extends.name.version}, but should be {parent.version}"
-
-    return Message(name, is_array, nullable, properties, messages, parent)
+    return Message(name, is_array, nullable, properties, messages, parents, super_interfaces, is_interface)
 
 
 def _property(element: Element) -> Property:
@@ -231,6 +262,24 @@ def _is_nullable(subtype: Optional[str], fallback: bool) -> bool:
             if subtype_info_key == "nullable":
                 return subtype_info_value == "true"
     return fallback
+
+def _is_message_interface(subtype: Optional[str]) -> bool:
+    if subtype is not None:
+        for subtype_info in subtype.split(","):
+            subtype_info_key = subtype_info.split("=")[0]
+            subtype_info_value = subtype_info.split("=")[1]
+            if subtype_info_key == "isInterface":
+                return subtype_info_value == "true"
+    return False
+
+def _get_message_interfaces(subtype: Optional[str]) -> Optional[str]:
+    if subtype is not None:
+        for subtype_info in subtype.split(","):
+            subtype_info_key = subtype_info.split("=")[0]
+            subtype_info_value = subtype_info.split("=")[1]
+            if subtype_info_key == "interface":
+                return subtype_info_value.split(';')
+    return None
 
 
 def _enum(subtype: Optional[str]) -> Optional[List[str]]:
@@ -269,16 +318,16 @@ def _get_key_ids(key: Optional[str]) -> List[str]:
 
 
 Name = NamedTuple("Name", [("base", str), ("version", int)])
-Extends = NamedTuple("Extends", [("name", Name), ("path", pathlib.Path)])
+Extends = NamedTuple("Extends", [("name", Name), ("path", pathlib.Path), ("query", str)])
 
 
 def _extends(raw: str) -> Extends:
-    components = urllib.parse.urlparse(raw)
+    components = urllib.parse.urlparse("navajo://" + raw)
     path = pathlib.Path(components.netloc) / pathlib.Path(components.path[1:])
     name = _name(path.name)
     path = path.with_name(name.base)
-
-    return Extends(name, path)
+    
+    return Extends(name, path, components.query)
 
 
 def _name(raw: str) -> Name:

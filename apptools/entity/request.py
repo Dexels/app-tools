@@ -23,8 +23,8 @@ class Network(object):
         # entity but instead run the file as a navascript call.
         return f'''
             <tml documentImplementation="SAXP">
-                <header>
-                    <transaction 
+                <header application="FCSTRAAT">
+                    <transaction
                         rpc_usr="{self.username}"
                         rpc_pwd="{self.password}"
                         rpc_name="{path}" />

@@ -225,8 +225,7 @@ class DistributeJob(object):
                     "scale":
                     '%sx' % int(scale.multiplier)
                 })
-                scaled_at = self.image.premultiplier * scale.multiplier
-                svg2png(filecontent, scaled_at, destination_path)
+                svg2png(filecontent, scale.multiplier, destination_path, self.image.size)
             elif self.image.isPNG():
                 content = {
                     "idiom": "universal",
@@ -261,12 +260,11 @@ class DistributeJob(object):
             makedirs(destination_directory_path, exist_ok=True)
             destination_path = join(destination_directory_path, image_name)
             if self.image.isSVG():
-                scaled_at = self.image.premultiplier * scale.multiplier
-                svg2png(filecontent, scaled_at, destination_path)
+                svg2png(filecontent, scale.multiplier, destination_path, self.image.size)
 
                 print(
                     "Converted image: '%s' svg to png at scale: '%s' to: '%s'"
-                    % (image_path, scaled_at, destination_path))
+                    % (image_path, scale.multiplier, destination_path))
             elif self.image.basename.endswith('.png'):
                 copyfile(image_path, destination_path)
 

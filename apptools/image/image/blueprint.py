@@ -14,16 +14,6 @@ class Idiom(Enum):
         return self.name.lower()
 
 
-class Size(object):
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
-
-    @classmethod
-    def square(cls, length):
-        return Size(length, length)
-
-
 class ImageDefinition(object):
     def __init__(self, idiom, scale, size=None):
         self.idiom = idiom
@@ -63,31 +53,31 @@ class Blueprint(object):
     @classmethod
     def make_appiconset_blueprint(cls):
         definitions = [
-            ImageDefinition(Idiom.IPHONE, 2, Size.square(20)),
-            ImageDefinition(Idiom.IPHONE, 3, Size.square(20)),
-            ImageDefinition(Idiom.IPHONE, 1, Size.square(29)),
-            ImageDefinition(Idiom.IPHONE, 2, Size.square(29)),
-            ImageDefinition(Idiom.IPHONE, 3, Size.square(29)),
-            ImageDefinition(Idiom.IPHONE, 2, Size.square(40)),
-            ImageDefinition(Idiom.IPHONE, 3, Size.square(40)),
-            ImageDefinition(Idiom.IPHONE, 1, Size.square(57)),
-            ImageDefinition(Idiom.IPHONE, 2, Size.square(57)),
-            ImageDefinition(Idiom.IPHONE, 2, Size.square(60)),
-            ImageDefinition(Idiom.IPHONE, 3, Size.square(60)),
-            ImageDefinition(Idiom.IPAD, 1, Size.square(20)),
-            ImageDefinition(Idiom.IPAD, 2, Size.square(20)),
-            ImageDefinition(Idiom.IPAD, 1, Size.square(29)),
-            ImageDefinition(Idiom.IPAD, 2, Size.square(29)),
-            ImageDefinition(Idiom.IPAD, 1, Size.square(40)),
-            ImageDefinition(Idiom.IPAD, 2, Size.square(40)),
-            ImageDefinition(Idiom.IPAD, 1, Size.square(50)),
-            ImageDefinition(Idiom.IPAD, 2, Size.square(50)),
-            ImageDefinition(Idiom.IPAD, 1, Size.square(72)),
-            ImageDefinition(Idiom.IPAD, 2, Size.square(72)),
-            ImageDefinition(Idiom.IPAD, 1, Size.square(76)),
-            ImageDefinition(Idiom.IPAD, 2, Size.square(76)),
-            ImageDefinition(Idiom.IPAD, 2, Size.square(83.5)),
-            ImageDefinition(Idiom.MARKETING, 1, Size.square(1024))
+            ImageDefinition(Idiom.IPHONE, 2, "20x20"),
+            ImageDefinition(Idiom.IPHONE, 3, "20x20"),
+            ImageDefinition(Idiom.IPHONE, 1, "29x29"),
+            ImageDefinition(Idiom.IPHONE, 2, "29x29"),
+            ImageDefinition(Idiom.IPHONE, 3, "29x29"),
+            ImageDefinition(Idiom.IPHONE, 2, "40x40"),
+            ImageDefinition(Idiom.IPHONE, 3, "40x40"),
+            ImageDefinition(Idiom.IPHONE, 1, "57x57"),
+            ImageDefinition(Idiom.IPHONE, 2, "57x57"),
+            ImageDefinition(Idiom.IPHONE, 2, "60x60"),
+            ImageDefinition(Idiom.IPHONE, 3, "60x60"),
+            ImageDefinition(Idiom.IPAD, 1, "20x20"),
+            ImageDefinition(Idiom.IPAD, 2, "20x20"),
+            ImageDefinition(Idiom.IPAD, 1, "29x29"),
+            ImageDefinition(Idiom.IPAD, 2, "29x29"),
+            ImageDefinition(Idiom.IPAD, 1, "40x40"),
+            ImageDefinition(Idiom.IPAD, 2, "40x40"),
+            ImageDefinition(Idiom.IPAD, 1, "50x50"),
+            ImageDefinition(Idiom.IPAD, 2, "50x50"),
+            ImageDefinition(Idiom.IPAD, 1, "72x72"),
+            ImageDefinition(Idiom.IPAD, 2, "72x72"),
+            ImageDefinition(Idiom.IPAD, 1, "76x76"),
+            ImageDefinition(Idiom.IPAD, 2, "76x76"),
+            ImageDefinition(Idiom.IPAD, 2, "83.5x83.5"),
+            ImageDefinition(Idiom.MARKETING, 1, "1024x1024")
         ]
 
         return cls(definitions)

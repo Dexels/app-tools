@@ -236,6 +236,7 @@ def _write_datamodel_inner(writer: IndentedWriter,
             parents.append(f"{parent.name}, " )
         writer.writeln(f"interface {message.name}Entity : {', '.join(parents)} {{")
         indented_writer = writer.indented()
+        
         for enum in shared_interface.enums:
             indented_writer.writeln(f"enum class {enum[0]} {{")
             indented_writer.indented().writeln(f'{", ".join(enum[1])}')
@@ -265,9 +266,9 @@ def _write_datamodel_inner(writer: IndentedWriter,
             pass
         else:
             if message.interfaces:
-                writer.writeln(f"interface {message.name}Entity : {message.interfaces[0].root.name} {{")
+                writer.writeln(f"interface {message.name}Entity : {message.interfaces[0].root.name}, Entity {{")
             else:
-                writer.writeln(f"interface {message.name}Entity {{")
+                writer.writeln(f"interface {message.name}Entity : Entity {{")
             indented_writer = writer.indented()
             for enum in shared_interface.enums:
                 indented_writer.writeln(f"enum class {enum[0]} {{")
@@ -341,7 +342,7 @@ def _write_datamodel_class(writer: IndentedWriter,
         
         if (super_interface_nonnull_variables):
             for variable in super_interface_nonnull_variables:
-                if variable in shared_interface_super_nonnull_variables:
+                if variable in shared_interface_super_nonnull_variables + nonnull_variables:
                     continue
                 if shared_interface:
                     if debug:
@@ -358,13 +359,24 @@ def _write_datamodel_class(writer: IndentedWriter,
             for variable in nonnull_variables:
                 import_list.add("com.google.gson.annotations.SerializedName")
                 if shared_interface:
-                    if debug:
-                        indented_writer.writeln('/* non null shared variable */ ')
-                    indented_writer.writeln(f'{variable.name}: {variable.type},')
+                    if variable in super_interface_nonnull_variables:
+                        if debug:
+                            indented_writer.writeln('/* non null shared override variable */ ')    
+                        indented_writer.writeln(f'{variable.name}: {variable.type},')
+                    else:
+                        if debug:
+                            indented_writer.writeln('/* non null shared variable */ ')    
+                        indented_writer.writeln(f'{variable.name}: {variable.type},')
                 else:
-                    if debug:
-                        indented_writer.writeln('/* non null variable */ ')
-                    indented_writer.writeln(f'@SerializedName("{variable.network_name}") open var {variable.name}: {variable.type},')
+                    if variable in super_interface_nonnull_variables:
+                        if debug:
+                            indented_writer.writeln('/* non null override variable */ ')    
+                        indented_writer.writeln(f'@SerializedName("{variable.network_name}") override var {variable.name}: {variable.type},')
+                    else:
+                        if debug:
+                            indented_writer.writeln('/* non null variable */ ')
+                        indented_writer.writeln(f'@SerializedName("{variable.network_name}") open var {variable.name}: {variable.type},')
+                    
                 constructor_vars.append(variable)
 
         if (shared_interface):
@@ -394,7 +406,9 @@ def _write_datamodel_class(writer: IndentedWriter,
                     vars.append(f'{variable.name}')
             if (super_interface_nonnull_variables):
                 for variable in super_interface_nonnull_variables:
-                    vars.append(f'{variable.name}')
+                    if variable in nonnull_variables:
+                        continue
+                    vars.append(f'{variable.name} /* super interface */')
             if nonnull_variables:
                 for variable in nonnull_variables:
                     vars.append(f'{variable.name}')
@@ -501,7 +515,7 @@ def _write_datamodel_class(writer: IndentedWriter,
     indented_writer.writeln(f"override fun copy(): {logic_type} {{")
     indented_writer.indented().write(f"val copy = {logic_type}(")
     for variable in constructor_vars:
-        indented_writer.append(f"{variable.name}{'.map { it.copy() }.map { it as ' + variable.type[12:-1] + ' }.toMutableList()' if variable.name.endswith('List') else ''}{'' if variable.primitive or variable.name.endswith('List') else '.copy()'}, ")
+        indented_writer.append(f"{variable.name}{'.map { it.copy() }.map { it as ' + variable.type[12:-1] + ' }.toMutableList()' if variable.name.endswith('List') else ''}{'' if variable.primitive or variable.name.endswith('List') else ('.copy() as ' + variable.type)}, ")
     indented_writer.appendln(")")
     indented_writer.indented().writeln(f"copy.copyNullableVariables(this as {logic_type})")
     indented_writer.indented().writeln(f"return copy")
@@ -518,7 +532,7 @@ def _write_datamodel_class(writer: IndentedWriter,
                 if variable.nullable:
                     indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}?.map {{ it.copy() }}?.map {{ it as {variable.type[12:-2]} }}?.toMutableList()")
                 else:
-                    indented_writer.indented().writeln(f"{vvariablear[1]} = from.{variable.name}.map {{ it.copy() }}.map {{ it as {variable.type[12:-1]} }}.toMutableList()")
+                    indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}.map {{ it.copy() }}.map {{ it as {variable.type[12:-1]} }}.toMutableList()")
             else:
                 indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}{'?' if variable.nullable else ''}.copy()")
     indented_writer.writeln("}")
@@ -840,20 +854,6 @@ def _get_variables(message: Message, prefix: str, recursive: bool = False):
     enums = []
     inner_classes = [] 
 
-    if recursive:
-        if len(message.extends) == 1:
-            result = _get_variables(message.extends[0].root, prefix, recursive)
-            nonnull_variables += result[0]
-            nullable_variables += result[1]
-            enums += result[2]
-            inner_classes += result[3]
-        for interface in message.interfaces:
-            result = _get_variables(interface.root, prefix, recursive)
-            nonnull_variables += result[0]
-            nullable_variables += result[1]
-            enums += result[2]
-            inner_classes += result[3]
-
     for property in message.properties:
         if property.method == "request":
             continue
@@ -917,6 +917,26 @@ def _get_variables(message: Message, prefix: str, recursive: bool = False):
             nullable_variables.append(Variable(name, variable_name, variable_type, variable_type_primitive, nullable))
         else:
             nonnull_variables.append(Variable(name, variable_name, variable_type, variable_type_primitive, nullable))
+    
+    if recursive:
+        if len(message.extends) == 1:
+            result = _get_variables(message.extends[0].root, prefix, recursive)
+            nonnull_variables = result[0] + nonnull_variables
+            nullable_variables += result[1] + nullable_variables
+            enums += result[2]
+            inner_classes += result[3]
+        for interface in message.interfaces:
+            result = _get_variables(interface.root, prefix, recursive)
+            for variable in result[0]:
+                if variable not in nonnull_variables:
+                    nonnull_variables.insert(0, variable)
+            for variable in result[1]:
+                if variable not in nullable_variables:
+                    nullable_variables.insert(0, variable)
+            enums += result[2]
+            inner_classes += result[3]
+
+
     return nonnull_variables, nullable_variables, enums, inner_classes
 
 # dependencies of an entity

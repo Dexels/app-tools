@@ -550,7 +550,7 @@ def _write_datamodel_class(writer: IndentedWriter,
             indented_writer.indented().indented().writeln(f"&& {variable.name} == other.{variable.name}")
         else:
             if variable.name.endswith("List"):
-                indented_writer.indented().indented().writeln(f"&& {f'if ({variable.name} == null || other.{variable.name} == null) {variable.name} == other.{variable.name} else' if variable.nullable else ''} {variable.name}!!.size == other.{variable.name}!!.size && {variable.name}!!.zip(other.{variable.name}!!) {{ a, b -> a.deepEquals(b) }}.reduce {{ x, y -> x && y}}")
+                indented_writer.indented().indented().writeln(f"&& {f'if ({variable.name} == null || other.{variable.name} == null) {variable.name} == other.{variable.name} else' if variable.nullable else ''} {variable.name}!!.size == other.{variable.name}!!.size && {variable.name}!!.zip(other.{variable.name}!!) {{ a, b -> a.deepEquals(b) }}.fold(true) {{ x, y -> x && y}}")
             else:
                 indented_writer.indented().indented().writeln(f"&& {f'if ({variable.name} == null) other.{variable.name} == null else {variable.name}?' if variable.nullable else variable.name}.deepEquals(other.{variable.name}){' == true' if variable.nullable else ''}")
             

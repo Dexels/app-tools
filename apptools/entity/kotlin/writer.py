@@ -317,7 +317,7 @@ def _write_datamodel_class(writer: IndentedWriter,
     member_vars = []    
 
     if len(message.extends) == 1:
-        super_variables = _get_variables(message.extends[0].root, prefix, True)[0]
+        super_variables = _get_variables(message.extends[0].root, message.extends[0].root.name + ".", True)[0]
     for super_interface in message.interfaces:
         super_interface_variables = _get_variables(super_interface.root, prefix)
 
@@ -884,7 +884,6 @@ def _get_variables(message: Message, prefix: str, recursive: bool = False):
         name = submessage.name
         nullable = submessage.nullable
         variable_type_primitive = False
-
         if submessage.is_array:
             if not submessage.extends or (submessage.interfaces and submessage.name != submessage.interfaces[0].name) or (len(submessage.extends) == 1 and (submessage.properties or submessage.messages)):
                 # inner class

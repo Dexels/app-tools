@@ -9,6 +9,9 @@ from apptools.entity.text import camelcase, capitalize
 
 # TODO: Use Swiftlints marker to disable all linting on generated files.
 
+# TODO: add original, saveOriginal(), copy(), copyNullableVariables(), deepEquals(), hasChanged(), toOriginal()
+# TODO: convenience init, equals, hashcode for entities with Id
+
 reserved_words = [
     "guard", "Protocol", "Self", "Type", "__COLUMN__", "__FILE__",
     "__FUNCTION__", "__LINE__", "as", "break", "case", "class", "continue",
@@ -24,16 +27,33 @@ debug = False
 protocol_as_innerclass = False
 
 class SharedInterface(object):
-    def __init__(self, name: str, variables: List[str], parents: List[Entity] = []):
+    def __init__(self, name: str, variables: List[str], parents: List[Entity] = [], enums: List = []):
         super().__init__()
 
         self.name = name
         self.variables = variables
         self.parents = parents
+        self.enums = enums
         self.is_inner = True
         for parent in parents:
             if parent.name == self.name:
                 self.is_inner = False
+
+class Variable(object):
+    def __init__(self, network_name: str, name: str, type: str, primitive: bool, nullable: bool, message: Message):
+        super().__init__()
+
+        self.network_name = network_name
+        self.name = name
+        self.type = type
+        self.primitive = primitive
+        self.nullable = nullable
+        self.message = message
+
+    def __eq__(self, other):
+        if isinstance(other, Variable):
+            return self.network_name == other.network_name
+        return NotImplemented
 
 def write(entities: List[Entity], options: Dict[str, Any]) -> None:
     global debug
@@ -65,7 +85,7 @@ def _write_entity(entity: Entity, output: pathlib.Path, force: bool) -> Set[path
 
     if not datamodel_class.exists():
         paths.add(datamodel_class)
-
+        
     with IndentedWriter(path=datamodel_class) as writer:
         print(f"Write {str(datamodel_class)}")
 
@@ -100,19 +120,29 @@ def _write_entity(entity: Entity, output: pathlib.Path, force: bool) -> Set[path
 
 
 def _write_datamodel(writer: IndentedWriter, entity: Entity) -> None:
+    global protocol_as_innerclass
     writer.writeln(
         "// swiftlint:disable type_body_length file_length line_length identifier_name superfluous_disable_command"
     )
     writer.newline()
     writer.writeln("import Foundation")
+    writer.writeln("import SendratoAppSDK")
     writer.newline()
-    _write_datamodel_inner(writer, entity.root)
+    if protocol_as_innerclass:
+        _write_datamodel_inner(writer, entity.root)
+    else:
+        postfix = _write_datamodel_inner(writer, entity.root)
+        writer.newline()
+        writer.writeln("// see: https://developer.apple.com/forums/thread/15195")
+        writer.writeln(postfix)
 
 def _write_datamodel_inner(writer: IndentedWriter,
                            message: Message,
-                           prefix: str = ''):
+                           prefix: str = '') -> str:
+    global protocol_as_innerclass
+    postfix = ""
     if message.is_interface:
-        shared_interface = _get_shared_interface(message)
+        shared_interface = _get_shared_interface(message, prefix)
         if debug:
             writer.writeln(f"// interface")
         writer.writeln(f"protocol {message.name}Entity")
@@ -122,22 +152,79 @@ def _write_datamodel_inner(writer: IndentedWriter,
             writer.append(f"{parent.name}, " )
         writer.appendln("{")
         indented_writer = writer.indented()
+        for enum in shared_interface.enums:
+            if protocol_as_innerclass:
+                _write_enum(writer, enum[0], enum[1])
+                writer.newline()
+            else:
+                with IndentedWriter(path=None) as enum_writer:
+                    _write_enum(enum_writer, f'{prefix.replace(".", "")}{message.name}Entity{enum[0]}', enum[1])
+                    enum_writer.fp.seek(0)
+                    postfix += enum_writer.fp.read() + "\n" + postfix
         for variable in shared_interface.variables:
-            indented_writer.writeln(f"var {variable[1]}: {variable[2]} {{ get set }}" )
+            indented_writer.writeln(f"var {variable.name}: {variable.type} {{ get set }}" )
         
         writer.writeln("}")
         writer.newline()
     elif len(message.extends) > 1:
-        shared_interface = _get_shared_interface(message)
+        shared_interface = _get_shared_interface(message, prefix)
+        if message.interfaces and len(message.interfaces) > 1:
+            assert False, f"This is not yet supported, multiple inheritance + multiple interfaces, not sure what code to generate"
+    
+        if message.interfaces and len(message.interfaces) == 1 and message.interfaces[0].root.name == message.name:
+            # add import
+            pass
+        else:
+            if message.interfaces:
+                if protocol_as_innerclass:
+                    writer.writeln(f"protocol {message.name}Entity : {message.interfaces[0].root.name}, Entity {{")
+                else:
+                    postfix += f'protocol {prefix.replace(".", "")}{message.name}Entity: {message.interfaces[0].root.name}, Entity {{\n'
+            else:
+                if protocol_as_innerclass:
+                    writer.writeln(f"protocol {message.name}Entity : Entity {{")
+                else:
+                    postfix += f'protocol {prefix.replace(".", "")}{message.name}Entity: Entity {{\n'
+            indented_writer = writer.indented()
+            for enum in shared_interface.enums:
+                if protocol_as_innerclass:
+                    _write_enum(writer, enum[0], enum[1])
+                    writer.newline()
+                else:
+                    with IndentedWriter(path=None) as enum_writer:
+                        _write_enum(enum_writer, f'{prefix.replace(".", "")}{message.name}Entity{enum[0]}', enum[1])
+                        enum_writer.fp.seek(0)
+                        postfix = enum_writer.fp.read() + "\n" + postfix
+            for variable in shared_interface.variables:
+                if protocol_as_innerclass:
+                    indented_writer.writeln(f"var {variable.name}: {variable.type} {{ get set }}")
+                else:
+                    postfix += f"\tvar {variable.name}: {variable.type} {{ get set }}\n"
+            if protocol_as_innerclass:
+                writer.writeln("}")
+                writer.newline()
+            else:
+                postfix += "}\n\n"
         for extends in message.extends:
-            _write_datamodel_class(writer, extends.root, prefix, shared_interface)
+            if protocol_as_innerclass:
+                _write_datamodel_class(writer, extends.root, prefix, shared_interface)
+                writer.newline()
+            else:
+                postfix += _write_datamodel_class(writer, extends.root, prefix, shared_interface)
+                postfix += "\n"
     else:
-        _write_datamodel_class(writer, message, prefix)
+        if protocol_as_innerclass:
+            _write_datamodel_class(writer, message, prefix)
+        else:
+            postfix += _write_datamodel_class(writer, message, prefix)
+    return postfix
 
 def _write_datamodel_class(writer: IndentedWriter,
                            message: Message,
                            prefix: str,
-                           shared_interface: SharedInterface = None) -> None:
+                           shared_interface: SharedInterface = None) -> str:
+    global protocol_as_innerclass
+    postfix = ""
     if shared_interface is None:
         writer.write(f"class {message.name}Entity")
     else:
@@ -169,6 +256,12 @@ def _write_datamodel_class(writer: IndentedWriter,
             shared_interface_super_nonnull_variables += _get_variables(parent.root, prefix)[0]
             shared_interface_super_nullable_variables += _get_variables(parent.root, prefix)[1]
 
+    hasId = False
+    if not shared_interface:
+        for variable in nonnull_variables:
+            if variable.network_name == "Id" and variable.type == "String" and not variable.nullable:
+                hasId = True
+
     if shared_interface:
         if shared_interface.is_inner:
             if protocol_as_innerclass:
@@ -176,20 +269,43 @@ def _write_datamodel_class(writer: IndentedWriter,
             else:
                 writer.append(f': {message.name}, {prefix.replace(".", "")}{shared_interface.name}')
         else:
-            writer.append(f": {message.name}, {shared_interface.name}")
+            writer.append(f": {message.name}")
+            if not already_implements(message, shared_interface):
+                writer.append(f", {shared_interface.name}")
     elif not message.extends:
-        writer.append(f": Codable")
+        writer.append(f": Entity, Codable")
     else:
         writer.append(f": {message.extends[0].name}")
     if not shared_interface:
         for message_interface in message.interfaces:
             writer.append(f", {message_interface.name}")
+    
+    if hasId:
+        writer.append(", Hashable")
     writer.append(" {")
     writer.newline()
     indented_writer = writer.indented()
-    
+    if hasId:
+        indented_writer.writeln('private static let insertId = "insert"')
+        indented_writer.newline()
+        indented_writer.writeln("func hash(into hasher: inout Hasher) {")
+        indented_writer.indented().writeln("hasher.combine(id)")
+        indented_writer.writeln("}")
+        indented_writer.newline()
+        indented_writer.writeln(f"static func == (lhs: {message.name}Entity, rhs: {message.name}Entity) -> Bool {{")
+        indented_writer.indented().writeln("return isEqual(lhs, rhs)")
+        indented_writer.writeln("}")
+        indented_writer.newline()
+        indented_writer.writeln("class func isEqual(_ lhs: AnyObject, _ rhs: AnyObject) -> Bool {")
+        indented_writer.indented().writeln(f"guard let lhs = lhs as? {message.name}Entity,")
+        indented_writer.indented().indented().writeln(f"let rhs = rhs as? {message.name}Entity else {{")
+        indented_writer.indented().indented().indented().writeln("return false")
+        indented_writer.indented().writeln("}")
+        indented_writer.indented().writeln("return lhs === rhs || (lhs.id == rhs.id && lhs.id != insertId)")
+        indented_writer.writeln("}")
+        indented_writer.newline()
     for inner_class in inner_classes:
-        _write_datamodel_inner(indented_writer, inner_class[0], inner_class[1])
+        postfix += _write_datamodel_inner(indented_writer, inner_class[0], inner_class[1])
 
     for enum in enums:
         _write_enum(indented_writer, enum[0], enum[1])
@@ -197,33 +313,36 @@ def _write_datamodel_class(writer: IndentedWriter,
     if shared_interface:
         for variable in shared_interface_super_nonnull_variables:
             if variable not in nonnull_variables:
-                indented_writer.writeln(f"var {variable[1]}: {variable[2]}")
+                indented_writer.writeln(f"var {variable.name}: {variable.type}")
 
         for variable in shared_interface_super_nullable_variables:
             if variable not in nullable_variables:
-                indented_writer.writeln(f"var {variable[1]}: {variable[2]}")
+                indented_writer.writeln(f"var {variable.name}: {variable.type}")
+
+        for variable in shared_interface.variables:
+            indented_writer.writeln(f"var {variable.name}: {variable.type}")
                 
     else:
         for variable in nonnull_variables:
-            indented_writer.writeln(f"var {variable[1]}: {variable[2]}")
+            indented_writer.writeln(f"var {variable.name}: {variable.type}")
 
         for variable in nullable_variables:
-            indented_writer.writeln(f"var {variable[1]}: {variable[2]}")
+            indented_writer.writeln(f"var {variable.name}: {variable.type}")
 
         for variable in super_interface_nonnull_variables:
             if variable not in nonnull_variables:
-                indented_writer.writeln(f"var {variable[1]}: {variable[2]}")
+                indented_writer.writeln(f"var {variable.name}: {variable.type}")
         
         for variable in super_interface_nullable_variables:
             if variable not in nullable_variables:
-                indented_writer.writeln(f"var {variable[1]}: {variable[2]}")
+                indented_writer.writeln(f"var {variable.name}: {variable.type}")
 
 
     writer.newline()
     
     own_nonnull_variables = False
     for variable in nonnull_variables:
-        if not variable in super_variables and not variable in shared_interface_super_nonnull_variables:
+        if not (variable in super_variables) and not (variable in shared_interface_super_nonnull_variables) and not shared_interface:
             own_nonnull_variables = True
 
     own_nullable_variables = False
@@ -231,36 +350,47 @@ def _write_datamodel_class(writer: IndentedWriter,
         if not variable in shared_interface_super_nullable_variables:
             own_nullable_variables = True
 
+    constructor_vars = []
+    member_vars = []
+
+    init_elements = []
+    for variable in super_variables:
+        init_elements.append(f'{variable.name}: {variable.type}')
+        constructor_vars.append(variable)
+    for variable in super_interface_nonnull_variables:
+        if variable in shared_interface_super_nonnull_variables + nonnull_variables:
+            continue
+        if shared_interface:
+            init_elements.append(f'{variable.name}: {variable.type}')
+        else:
+            init_elements.append(f'{variable.name}: {variable.type}')
+        constructor_vars.append(variable)
+    for variable in nonnull_variables:
+        if shared_interface:
+            init_elements.append(f'{variable.name}: {variable.type}')
+        else:
+            init_elements.append(f'{variable.name}: {variable.type}')
+        constructor_vars.append(variable)
+    if shared_interface:                
+        for variable in shared_interface.variables:
+            init_elements.append(f'{variable.name}: {variable.type}')
+            constructor_vars.append(variable)
+    for variable in shared_interface_super_nonnull_variables:
+        if variable in nonnull_variables:
+            continue
+        init_elements.append(f'{variable.name}: {variable.type}')
+        constructor_vars.append(variable)
+
     # init
     if own_nonnull_variables or own_nullable_variables:
         if super_variables or nonnull_variables or super_interface_nonnull_variables or shared_interface or shared_interface_super_nonnull_variables or shared_interface_super_nullable_variables:
             # if we have a super and no additional vars then we should use override
-            if (super_variables or shared_interface_super_nonnull_variables) and not (own_nonnull_variables):
+            #if (super_variables and not (own_nonnull_variables)) or (shared_interface_super_nonnull_variables and not (own_nonnull_variables)):
+            if (super_variables or (nonnull_variables and shared_interface and not shared_interface.variables)) and not (own_nonnull_variables):
                 indented_writer.write(f"override init(")
             else:
                 indented_writer.write(f"init(")
-            init_elements = []
-            for variable in super_variables:
-                init_elements.append(f'{variable[1]}: {variable[2]}')
-            for variable in super_interface_nonnull_variables:
-                if variable in shared_interface_super_nonnull_variables:
-                    continue
-                if shared_interface:
-                    init_elements.append(f'{variable[1]}: {variable[2]}')
-                else:
-                    init_elements.append(f'{variable[1]}: {variable[2]}')
-            for variable in nonnull_variables:
-                if shared_interface:
-                    init_elements.append(f'{variable[1]}: {variable[2]}')
-                else:
-                    init_elements.append(f'{variable[1]}: {variable[2]}')
-            if shared_interface:                
-                for variable in shared_interface.variables:
-                    init_elements.append(f'var {variable[1]}: {variable[2]}')
-            for variable in shared_interface_super_nonnull_variables:
-                if variable in nonnull_variables:
-                    continue
-                init_elements.append(f'{variable[1]}: {variable[2]}')
+            
 
             indented_writer.append(", ".join(init_elements))
 
@@ -270,22 +400,23 @@ def _write_datamodel_class(writer: IndentedWriter,
             
             if (super_interface_nonnull_variables):
                 for variable in super_interface_nonnull_variables:
-                    if variable in shared_interface_super_nonnull_variables:
+                    if variable in shared_interface_super_nonnull_variables + nonnull_variables:
                         continue
                     if shared_interface:
                         if debug:
                             init_writer.writeln('/* super interface non null shared variable */ ')
-                        init_writer.writeln(f'self.{variable[1]} = {variable[1]}')
+                        init_writer.writeln(f'self.{variable.name} = {variable.name}')
                     else:
                         if debug:
                             init_writer.writeln('/* super interface non null variable */ ')
-                        init_writer.writeln(f'self.{variable[1]} = {variable[1]}')
+                        init_writer.writeln(f'self.{variable.name} = {variable.name}')
+                    member_vars.append(variable)
 
             if (shared_interface):
                 for variable in shared_interface.variables:
                     if debug:
                         init_writer.writeln('/* shared interface variable */ ')
-                    init_writer.writeln(f'self.{variable[1]} = {variable[1]}')
+                    init_writer.writeln(f'self.{variable.name} = {variable.name}')
 
             if (shared_interface_super_nonnull_variables):
                 for variable in shared_interface_super_nonnull_variables:
@@ -293,7 +424,8 @@ def _write_datamodel_class(writer: IndentedWriter,
                         continue
                     if debug:
                         init_writer.writeln('/* shared interface super nonnull variable */ ')
-                    init_writer.writeln(f'self.{variable[1]} = {variable[1]}')
+                    init_writer.writeln(f'self.{variable.name} = {variable.name}')
+                    member_vars.append(variable)
 
             if (nonnull_variables):
                 if shared_interface:
@@ -301,27 +433,29 @@ def _write_datamodel_class(writer: IndentedWriter,
                     init_writer.write('super.init(')
                     for variable in nonnull_variables:
                         if debug:
-                            init_elements.append(f'/* non null shared variable */ {variable[1]}: {variable[1]}')
+                            init_elements.append(f'/* non null shared variable */ {variable.name}: {variable.name}')
                         else:
-                            init_elements.append(f'{variable[1]}: {variable[1]}')
+                            init_elements.append(f'{variable.name}: {variable.name}')
                     init_writer.append(", ".join(init_elements))
                     init_writer.appendln(')')
                 else:
                     for variable in nonnull_variables:
                         if debug:
                             init_writer.writeln('/* non null variable */ ')
-                        init_writer.writeln(f'self.{variable[1]} = {variable[1]}')
+                        init_writer.writeln(f'self.{variable.name} = {variable.name}')
+                        # member_vars.append(variable)
             
             if (super_variables):
                 init_elements = []
                 init_writer.write('super.init(')
                 for variable in super_variables:
                     if debug:
-                        init_elements.append(f'/* super variable */ {variable[1]}: {variable[1]}')
+                        init_elements.append(f'/* super variable */ {variable.name}: {variable.name}')
                     else:
-                        init_elements.append(f'{variable[1]}: {variable[1]}')
+                        init_elements.append(f'{variable.name}: {variable.name}')
                 init_writer.append(", ".join(init_elements))
                 init_writer.appendln(')')
+                
 
             indented_writer.writeln("}")
         elif not message.extends:
@@ -330,8 +464,100 @@ def _write_datamodel_class(writer: IndentedWriter,
 
     if own_nonnull_variables or own_nullable_variables:
         _write_coding(writer.indented(), message, prefix, shared_interface)
+
+
+    # write Entity functions
+    logic_type = f"{prefix}{shared_interface.name}{message.name}" if shared_interface else f"{prefix[:-1]}"
+    indented_writer.writeln(f"private var original: {logic_type}? = nil")
+    indented_writer.newline()
+    if message.extends or shared_interface:
+        indented_writer.write("override ")
+    else:
+        indented_writer.write("")
+    indented_writer.appendln("func saveOriginal() {")
+    indented_writer.indented().writeln(f"original = (copy() as? {logic_type})")
+    indented_writer.writeln("}")
+    indented_writer.newline()
+    if message.extends or shared_interface:
+        indented_writer.write("override ")
+    else:
+        indented_writer.write("")
+    indented_writer.appendln(f"func copy() -> Entity {{")
+    indented_writer.indented().write(f"let copy = {logic_type}(")
+    items = []
+    for variable in constructor_vars:
+        items.append(f"{variable.name}: {variable.name}{f'.map {{ ($0 as! Entity).copy() as! {variable.type[1:-1]} }}' if variable.name.endswith('List') else ''}{'' if variable.primitive or variable.name.endswith('List') else ('.copy() as! ' + variable.type)}")
+    indented_writer.append(", ".join(items))
+    indented_writer.appendln(")")
+    indented_writer.indented().writeln(f"copy.copyNullableVariables(from: self as! {logic_type})")
+    indented_writer.indented().writeln(f"return copy")
+    indented_writer.writeln("}")
+    indented_writer.newline()
+    indented_writer.writeln(f"func copyNullableVariables(from: {logic_type}) {{")
+    if message.extends or shared_interface:
+        indented_writer.indented().writeln(f"super.copyNullableVariables(from: from)")
+    for variable in member_vars:
+        if variable.primitive:
+            indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}")
+        else:
+            if variable.name.endswith("List"):
+                if variable.nullable:
+                    indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}?.map {{ $0.copy() }}")
+                else:
+                    indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}.map {{ $0.copy() }}")
+            else:
+                indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}{'?' if variable.nullable else ''}.copy()")
+    indented_writer.writeln("}")
+    indented_writer.newline()
+    
+    if message.extends or shared_interface:
+        indented_writer.write("override ")
+    else:
+        indented_writer.write("")
+    indented_writer.appendln(f"func deepEquals(other: Entity?) -> Bool {{")
+
+    if message.extends:
+        indented_writer.indented().writeln(f"if (!super.deepEquals(other: other)) {{")
+        indented_writer.indented().indented().writeln("return false")
+        indented_writer.indented().writeln("}")
+    # 
+    indented_writer.indented().writeln(f"if let other = (other as? {logic_type}) {{")
+    indented_writer.indented().indented().writeln(f"return true")
+    for variable in (constructor_vars + member_vars):
+        if variable.primitive:
+            indented_writer.indented().indented().indented().writeln(f"&& {variable.name} == other.{variable.name}")
+        else:
+            if variable.name.endswith("List"):
+                indented_writer.indented().indented().indented().writeln(f"&& {f'if ({variable.name} == null || other.{variable.name} == null) {variable.name} == other.{variable.name} else' if variable.nullable else ''} self.{variable.name}.count == other.{variable.name}.count && zip({variable.name}, other.{variable.name}).allSatisfy {{ ($0.0 as! Entity).deepEquals(other: ($0.1 as! Entity)) }}")
+            else:
+                indented_writer.indented().indented().indented().writeln(f"&& {f'if ({variable.name} == null) other.{variable.name} == null else {variable.name}?' if variable.nullable else variable.name}.deepEquals(other: other.{variable.name}){' == true' if variable.nullable else ''}")
+    indented_writer.indented().writeln("} else {")
+    indented_writer.indented().indented().writeln("return false")
+    indented_writer.indented().writeln("}")
+    indented_writer.writeln("}")
+    indented_writer.newline()
+    if message.extends or shared_interface:
+        indented_writer.write("override ")
+    else:
+        indented_writer.write("")
+    indented_writer.appendln(f"func hasChanged() -> Bool {{")
+    indented_writer.indented().writeln(f"return !deepEquals(other: original)")
+    indented_writer.writeln("}")
+
+    indented_writer.newline()
+    if message.extends or shared_interface:
+        indented_writer.write("override ")
+    else:
+        indented_writer.write("")
+    indented_writer.appendln(f"func toOriginal() -> Entity {{")
+    indented_writer.indented().writeln(f"let result = original")
+    indented_writer.indented().writeln(f"original?.saveOriginal()")
+    indented_writer.indented().writeln(f"return result!")
+    indented_writer.writeln("}")
+
     writer.writeln("}")
     writer.newline()
+    return postfix
 
 
 def _write_coding(writer: IndentedWriter,
@@ -369,31 +595,31 @@ def _write_coding(writer: IndentedWriter,
         if not shared_interface:
             for variable in nonnull_variables:
                 writer.indented().writeln(
-                    f'case {variable[1]} = "{variable[0]}"')
+                    f'case {variable.name} = "{variable.network_name}"')
 
             for variable in nullable_variables:
                 writer.indented().writeln(
-                    f'case {variable[1]} = "{variable[0]}"')
+                    f'case {variable.name} = "{variable.network_name}"')
 
         for variable in shared_interface_super_nonnull_variables:
             if variable not in nonnull_variables:
                 writer.indented().writeln(
-                    f'case {variable[1]} = "{variable[0]}"')
+                    f'case {variable.name} = "{variable.network_name}"')
 
         for variable in shared_interface_super_nullable_variables:
             if variable not in nullable_variables:
                 writer.indented().writeln(
-                    f'case {variable[1]} = "{variable[0]}"')
+                    f'case {variable.name} = "{variable.network_name}"')
 
         for variable in super_interface_nonnull_variables:
             if variable not in nonnull_variables:
                 writer.indented().writeln(
-                    f'case {variable[1]} = "{variable[0]}"')
+                    f'case {variable.name} = "{variable.network_name}"')
 
         for variable in super_interface_nullable_variables:
             if variable not in nullable_variables:
                 writer.indented().writeln(
-                    f'case {variable[1]} = "{variable[0]}"')
+                    f'case {variable.name} = "{variable.network_name}"')
         
         writer.indented().writeln(
                 f'case __type__ = "__type__"')
@@ -415,49 +641,86 @@ def _write_coding(writer: IndentedWriter,
         
         if not shared_interface:
             for variable in nonnull_variables:
-                if variable[3] and len(variable[3].extends) > 1:
-                    if len(variable[3].interfaces) == 1:
-                        codingPrefix = prefix + variable[3].name
+                if variable.message and len(variable.message.extends) > 1:
+                    codingPrefix = prefix + variable.message.name
+                    # TODO this piece is not only for nonnull_variables                    
+                    indented_writer.writeln(f"var {variable.name}NestedUnkeyedContainer = try container.nestedUnkeyedContainer(forKey: .{variable.name})")
+                    indented_writer.writeln(f"var {variable.name}TmpNestedUnkeyedContainer = {variable.name}NestedUnkeyedContainer")
+                    if variable.type[0] == '[':
+                        indented_writer.writeln(f"var {variable.name} = {variable.type}()")
+                        indented_writer.writeln(f"while !{variable.name}NestedUnkeyedContainer.isAtEnd {{")
+                        indented_indented_writer.writeln(f"let typeContainer = try {variable.name}NestedUnkeyedContainer.nestedContainer(keyedBy: CodingKeys.self)")
+                        indented_indented_writer.writeln("let type = try typeContainer.decode(String.self, forKey: .__type__)")
+                        indented_indented_writer.writeln("switch type {")
+                        for extends in variable.message.extends:
+                            indented_indented_writer.indented().writeln(f'case "{pathlib.Path(*extends.path.parts[1:])}":')
+                            indented_indented_indented_writer.indented().writeln(f"{variable.name}.append(try {variable.name}TmpNestedUnkeyedContainer.decode({codingPrefix}{extends.name}.self))")
+                        indented_indented_writer.indented().writeln(f"default:")
+                        indented_indented_indented_writer.indented().writeln(f'fatalError("should not happen")')
+                        indented_indented_writer.writeln("}")
+                        indented_writer.writeln("}")
+                        indented_writer.writeln(f"self.{variable.name} = {variable.name}")
                     else:
-                        codingPrefix = prefix
-                    # TODO this piece is not only for nonnull_variables
-                    # TODO check if we're list or not!
-                    indented_writer.writeln(f"var {variable[1]}NestedUnkeyedContainer = try container.nestedUnkeyedContainer(forKey: .{variable[1]})")
-                    indented_writer.writeln(f"var {variable[1]}TmpNestedUnkeyedContainer = {variable[1]}NestedUnkeyedContainer")
-                    indented_writer.writeln(f"var {variable[1]} = {variable[2]}()")
-                    indented_writer.writeln(f"while !{variable[1]}NestedUnkeyedContainer.isAtEnd {{")
-                    indented_indented_writer.writeln(f"let typeContainer = try {variable[1]}NestedUnkeyedContainer.nestedContainer(keyedBy: CodingKeys.self)")
-                    indented_indented_writer.writeln("let type = try typeContainer.decode(String.self, forKey: .__type__)")
-                    indented_indented_writer.writeln("switch type {")
-                    for extends in variable[3].extends:
-                        indented_indented_writer.writeln(f'case "{pathlib.Path(*extends.path.parts[1:])}":')
-                        indented_indented_indented_writer.writeln(f"{variable[1]}.append(try {variable[1]}TmpNestedUnkeyedContainer.decode({codingPrefix}{extends.name}.self))")
-                    indented_indented_writer.writeln(f"default:")
-                    indented_indented_indented_writer.writeln(f"break")
-                    indented_indented_writer.writeln("}")
-                    indented_writer.writeln("}")
-                    indented_writer.writeln(f"self.{variable[1]} = {variable[1]}")
+                        indented_writer.writeln(f"let typeContainer = try {variable.name}NestedUnkeyedContainer.nestedContainer(keyedBy: CodingKeys.self)")
+                        indented_writer.writeln("let type = try typeContainer.decode(String.self, forKey: .__type__)")
+                        indented_writer.writeln("switch type {")
+                        for extends in variable.message.extends:
+                            indented_indented_writer.writeln(f'case "{pathlib.Path(*extends.path.parts[1:])}":')
+                            indented_indented_indented_writer.writeln(f"self.{variable.name} = (try {variable.name}TmpNestedUnkeyedContainer.decode({codingPrefix}{extends.name}.self))")
+                        indented_indented_writer.writeln(f"default:")
+                        indented_indented_indented_writer.writeln(f'fatalError("should not happen")')
+                        indented_writer.writeln("}")
                 else:
-                    writer.indented().writeln(f'{variable[1]} = try container.decode({variable[2]}.self, forKey: .{variable[1]})')
+                    writer.indented().writeln(f'{variable.name} = try container.decode({variable.type}.self, forKey: .{variable.name})')
 
             for variable in nullable_variables:
-                writer.indented().writeln(f'{variable[1]} = try container.decodeIfPresent({variable[2][:-1]}.self, forKey: .{variable[1]})')
+                if variable.message and len(variable.message.extends) > 1:
+                    codingPrefix = prefix + variable.message.name
+                    # TODO this piece is not only for nonnull_variables                    
+                    indented_writer.writeln(f"var {variable.name}NestedUnkeyedContainer = try container.nestedUnkeyedContainer(forKey: .{variable.name})")
+                    indented_writer.writeln(f"var {variable.name}TmpNestedUnkeyedContainer = {variable.name}NestedUnkeyedContainer")
+                    if variable.type[0] == '[':
+                        indented_writer.writeln(f"var {variable.name} = {variable.type}()")
+                        indented_writer.writeln(f"while !{variable.name}NestedUnkeyedContainer.isAtEnd {{")
+                        indented_indented_writer.writeln(f"let typeContainer = try {variable.name}NestedUnkeyedContainer.nestedContainer(keyedBy: CodingKeys.self)")
+                        indented_indented_writer.writeln("let type = try typeContainer.decodeIfPresent(String.self, forKey: .__type__)")
+                        indented_indented_writer.writeln("switch type {")
+                        for extends in variable.message.extends:
+                            indented_indented_writer.indented().writeln(f'case "{pathlib.Path(*extends.path.parts[1:])}":')
+                            indented_indented_indented_writer.indented().writeln(f"{variable.name}.append(try {variable.name}TmpNestedUnkeyedContainer.decodeIfPresent({codingPrefix}{extends.name}.self))")
+                        indented_indented_writer.indented().writeln(f"default:")
+                        indented_indented_indented_writer.indented().writeln(f'break')
+                        indented_indented_writer.writeln("}")
+                        indented_writer.writeln("}")
+                        indented_writer.writeln(f"self.{variable.name} = {variable.name}")
+                    else:
+                        indented_writer.writeln(f"let typeContainer = try {variable.name}NestedUnkeyedContainer.nestedContainer(keyedBy: CodingKeys.self)")
+                        indented_writer.writeln("let type = try typeContainer.decodeIfPresent(String.self, forKey: .__type__)")
+                        indented_writer.writeln("switch type {")
+                        for extends in variable.message.extends:
+                            indented_indented_writer.writeln(f'case "{pathlib.Path(*extends.path.parts[1:])}":')
+                            indented_indented_indented_writer.writeln(f"self.{variable.name} = (try {variable.name}TmpNestedUnkeyedContainer.decodeIfPresent({codingPrefix}{extends.name}.self))")
+                        indented_indented_writer.writeln(f"default:")
+                        indented_indented_indented_writer.writeln(f'break')
+                        indented_writer.writeln("}")
+                else:
+                    writer.indented().writeln(f'{variable.name} = try container.decodeIfPresent({variable.type[:-1]}.self, forKey: .{variable.name})')
 
         for variable in shared_interface_super_nonnull_variables:
             if variable not in nonnull_variables:
-                writer.indented().writeln(f'{variable[1]} = try container.decode({variable[2]}.self, forKey: .{variable[1]})')
+                writer.indented().writeln(f'{variable.name} = try container.decode({variable.type}.self, forKey: .{variable.name})')
 
         for variable in shared_interface_super_nullable_variables:
             if variable not in nullable_variables:
-                writer.indented().writeln(f'{variable[1]} = try container.decodeIfPresent({variable[2][:-1]}.self, forKey: .{variable[1]})')
+                writer.indented().writeln(f'{variable.name} = try container.decodeIfPresent({variable.type[:-1]}.self, forKey: .{variable.name})')
 
         for variable in super_interface_nonnull_variables:
             if variable not in nonnull_variables:
-                writer.indented().writeln(f'{variable[1]} = try container.decode({variable[2]}.self, forKey: .{variable[1]})')
+                writer.indented().writeln(f'{variable.name} = try container.decode({variable.type}.self, forKey: .{variable.name})')
 
         for variable in super_interface_nullable_variables:
             if variable not in nullable_variables:
-                writer.indented().writeln(f'{variable[1]} = try container.decodeIfPresent({variable[2][:-1]}.self, forKey: .{variable[1]})')
+                writer.indented().writeln(f'{variable.name} = try container.decodeIfPresent({variable.type[:-1]}.self, forKey: .{variable.name})')
 
 
     if len(message.extends) == 1 or shared_interface:
@@ -483,49 +746,80 @@ def _write_coding(writer: IndentedWriter,
         if not shared_interface:
             
             for variable in nonnull_variables:
-                if variable[3] and len(variable[3].extends) > 1:
-                    if len(variable[3].interfaces) == 1:
-                        codingPrefix = prefix + variable[3].name
-                    else:
-                        codingPrefix = prefix
+                if variable.message and len(variable.message.extends) > 1:
+                    codingPrefix = prefix + variable.message.name
                     # TODO this piece is not only for nonnull_variables
-                    # TODO check if we're list or not!
-                    indented_writer.writeln(f"var {variable[1]}Container = container.nestedUnkeyedContainer(forKey: .{variable[1]})")
-                    indented_writer.writeln(f"for element in {variable[1]} {{")
-                    # TODO what does the switch help?
-                    # TODO shouldn't we also encode the type here?
-                    # TODO should refer to correct type (UserProgram.ProgramItemMatch instead of Match)
-                    indented_indented_writer.writeln(f"var typeContainer = {variable[1]}Container.nestedContainer(keyedBy: CodingKeys.self)")
-                    indented_indented_writer.writeln("switch element {")
-                    for extends in variable[3].extends:
-                        indented_indented_writer.writeln(f"case let {camelcase(extends.name)} as {codingPrefix}{extends.name}:")
-                        indented_indented_indented_writer.writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .__type__)')
-                        indented_indented_indented_writer.writeln(f"try {variable[1]}Container.encode({camelcase(extends.name)})")
-                    indented_indented_writer.writeln(f"default:")
-                    indented_indented_indented_writer.writeln(f"break")
-                    indented_indented_writer.writeln("}")
-                    indented_writer.writeln("}")
+                    indented_writer.writeln(f"var {variable.name}Container = container.nestedUnkeyedContainer(forKey: .{variable.name})")
+                    if variable.type[0] == '[':
+                        indented_writer.writeln(f"for element in {variable.name} {{")
+                        indented_indented_writer.writeln(f"var typeContainer = {variable.name}Container.nestedContainer(keyedBy: CodingKeys.self)")
+                        indented_indented_writer.writeln("switch element {")
+                        for extends in variable.message.extends:
+                            indented_indented_writer.indented().writeln(f"case let {camelcase(extends.name)} as {codingPrefix}{extends.name}:")
+                            indented_indented_indented_writer.indented().writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .__type__)')
+                            indented_indented_indented_writer.indented().writeln(f"try {variable.name}Container.encode({camelcase(extends.name)})")
+                        indented_indented_writer.indented().writeln(f"default:")
+                        indented_indented_indented_writer.indented().writeln(f'fatalError("should not happen")')
+                        indented_indented_writer.writeln("}")
+                        indented_writer.writeln("}")
+                    else:                        
+                        indented_writer.writeln(f"var typeContainer = {variable.name}Container.nestedContainer(keyedBy: CodingKeys.self)")
+                        indented_writer.writeln(f"switch {variable.name} {{")
+                        for extends in variable.message.extends:
+                            indented_indented_writer.writeln(f"case let {camelcase(extends.name)} as {codingPrefix}{extends.name}:")
+                            indented_indented_indented_writer.writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .__type__)')
+                            indented_indented_indented_writer.writeln(f"try {variable.name}Container.encode({camelcase(extends.name)})")
+                        indented_indented_writer.writeln(f"default:")
+                        indented_indented_indented_writer.writeln(f'fatalError("should not happen")')
+                        indented_writer.writeln("}")
                 else:
-                    writer.indented().writeln(f'try container.encode({variable[1]}, forKey: .{variable[1]})')
+                    writer.indented().writeln(f'try container.encode({variable.name}, forKey: .{variable.name})')
 
             for variable in nullable_variables:
-                writer.indented().writeln(f'try container.encode({variable[1]}, forKey: .{variable[1]})')
+                if variable.message and len(variable.message.extends) > 1:
+                    codingPrefix = prefix + variable.message.name
+                    # TODO this piece is not only for nonnull_variables
+                    indented_writer.writeln(f"var {variable.name}Container = container.nestedUnkeyedContainer(forKey: .{variable.name})")
+                    if variable.type[0] == '[':
+                        indented_writer.writeln(f"for element in {variable.name} {{")
+                        indented_indented_writer.writeln(f"var typeContainer = {variable.name}Container.nestedContainer(keyedBy: CodingKeys.self)")
+                        indented_indented_writer.writeln("switch element {")
+                        for extends in variable.message.extends:
+                            indented_indented_writer.indented().writeln(f"case let {camelcase(extends.name)} as {codingPrefix}{extends.name}:")
+                            indented_indented_indented_writer.indented().writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .__type__)')
+                            indented_indented_indented_writer.indented().writeln(f"try {variable.name}Container.encode({camelcase(extends.name)})")
+                        indented_indented_writer.indented().writeln(f"default:")
+                        indented_indented_indented_writer.indented().writeln(f'break')
+                        indented_indented_writer.writeln("}")
+                        indented_writer.writeln("}")
+                    else:                        
+                        indented_writer.writeln(f"var typeContainer = {variable.name}Container.nestedContainer(keyedBy: CodingKeys.self)")
+                        indented_writer.writeln(f"switch {variable.name} {{")
+                        for extends in variable.message.extends:
+                            indented_indented_writer.writeln(f"case let {camelcase(extends.name)} as {codingPrefix}{extends.name}:")
+                            indented_indented_indented_writer.writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .__type__)')
+                            indented_indented_indented_writer.writeln(f"try {variable.name}Container.encode({camelcase(extends.name)})")
+                        indented_indented_writer.writeln(f"default:")
+                        indented_indented_indented_writer.writeln(f'break')
+                        indented_writer.writeln("}")
+                else:
+                    writer.indented().writeln(f'try container.encode({variable.name}, forKey: .{variable.name})')
 
         for variable in shared_interface_super_nonnull_variables:
             if variable not in nonnull_variables:
-                writer.indented().writeln(f'try container.encode({variable[1]}, forKey: .{variable[1]})')
+                writer.indented().writeln(f'try container.encode({variable.name}, forKey: .{variable.name})')
 
         for variable in shared_interface_super_nullable_variables:
             if variable not in nullable_variables:
-                writer.indented().writeln(f'try container.encode({variable[1]}, forKey: .{variable[1]})')
+                writer.indented().writeln(f'try container.encode({variable.name}, forKey: .{variable.name})')
 
         for variable in super_interface_nonnull_variables:
             if variable not in nonnull_variables:
-                writer.indented().writeln(f'try container.encode({variable[1]}, forKey: .{variable[1]})')
+                writer.indented().writeln(f'try container.encode({variable.name}, forKey: .{variable.name})')
 
         for variable in super_interface_nullable_variables:
             if variable not in nullable_variables:
-                writer.indented().writeln(f'try container.encode({variable[1]}, forKey: .{variable[1]})')
+                writer.indented().writeln(f'try container.encode({variable.name}, forKey: .{variable.name})')
 
     writer.writeln("}")
 
@@ -535,7 +829,7 @@ def _write_coding(writer: IndentedWriter,
 def _write_enum(writer: IndentedWriter, name: str,
                 cases: List[str]) -> None:
     writer.writeln(
-        f"enum {name}: String, Codable, CaseIterable, Comparable {{")
+        f"enum {'`Type`' if name == 'Type' else name}: String, Codable, CaseIterable, Comparable {{")
     for case in cases:
         case_name = _to_case(case)
         value = case
@@ -583,7 +877,6 @@ def _write_logic_inner(writer: IndentedWriter, message: Message, prefix: str) ->
         if message.messages:
             indented_writer = writer.indented()
             for submessage in message.messages:
-                name = submessage.name
                 if submessage.is_array:
                     if len(submessage.extends) != 1 or submessage.properties or submessage.messages:
                         _write_logic_inner(indented_writer, submessage, message.name)
@@ -594,7 +887,7 @@ def _write_logic_inner(writer: IndentedWriter, message: Message, prefix: str) ->
         writer.newline()
         
     elif len(message.extends) > 1:
-        shared_interface = _get_shared_interface(message)
+        shared_interface = _get_shared_interface(message, prefix)
         if message.interfaces and len(message.interfaces) > 1:
             assert False, f"This is not yet supported, multiple inheritance + multiple interfaces, not sure what code to generate"
     
@@ -602,22 +895,11 @@ def _write_logic_inner(writer: IndentedWriter, message: Message, prefix: str) ->
             # add import
             pass
         else:
-            if message.interfaces:
-                if protocol_as_innerclass:
-                    writer.writeln(f"protocol {message.name}: {message.interfaces[0].root.name} {{")
-                else:
-                    postfix += f"protocol {prefix}{message.name}: {message.interfaces[0].root.name} {{"
+            if protocol_as_innerclass:
+                writer.writeln(f"protocol {message.name}: {message.name}Entity {{")
             else:
-                if protocol_as_innerclass:
-                    writer.writeln(f"protocol {message.name} {{")
-                else:
-                    postfix += f"protocol {message.name} {{"
+                postfix += f"protocol {prefix}{message.name}: {prefix}{message.name}Entity {{\n"
             indented_writer = writer.indented()
-            for variable in shared_interface.variables:
-                if protocol_as_innerclass:
-                    indented_writer.writeln(f"var {variable[1]}: {variable[2]}" )
-                else:
-                    postfix += f"var {variable[1]}: {variable[2]}"
             if protocol_as_innerclass:
                 writer.writeln("}")
                 writer.newline()
@@ -678,24 +960,28 @@ def _write_logic_class(writer: IndentedWriter, message: Message, shared_interfac
         constructor_elements.append(f"{camelcase(message.name)}: {message.name}")
         for constructor_parameter in shared_interface_super_nonnull_variables:
             if constructor_parameter not in super_nonnull_variables:
-                constructor_elements.append(f'{constructor_parameter[1]}: {constructor_parameter[2]}')
+                constructor_elements.append(f'{constructor_parameter.name}: {constructor_parameter.type}')
         for variable in shared_interface.variables:
             if constructor_parameter not in super_nonnull_variables:
-                constructor_elements.append(f"{variable[1]}: {variable[2]}")
+                constructor_elements.append(f"{variable.name}: {variable.type}")
+        if shared_interface:
+            for variable in shared_interface.variables:
+                if variable not in super_nonnull_variables:
+                    constructor_elements.append(f'{variable.name}: {variable.type}')
         indented_writer.writeln(f'convenience init({", ".join(constructor_elements)}) {{')
         super_elements = []
         
         for constructor_parameter in super_nonnull_variables:
-            name = constructor_parameter[1]
+            name = constructor_parameter.name
             super_elements.append(f'{name}: {camelcase(message.name)}.{name}')
         for constructor_parameter in shared_interface_super_nonnull_variables:
             if constructor_parameter not in super_nonnull_variables:
-                name = constructor_parameter[1]
+                name = constructor_parameter.name
                 super_elements.append(f'{name}: {name}')
         if shared_interface:
             for variable in shared_interface.variables:
                 if variable not in super_nonnull_variables:
-                    super_elements.append(f'{variable[1]}: {variable[1]}')
+                    super_elements.append(f'{variable.name}: {variable.name}')
         constructor_writer.writeln(f'self.init({", ".join(super_elements)})')
         indented_writer.writeln("}")
         
@@ -710,6 +996,7 @@ def _write_service(writer: IndentedWriter, entity: Entity) -> None:
     )
     writer.newline()
     writer.writeln(f"import Alamofire")
+    writer.writeln(f"import SendratoAppSDK")
     writer.newline()
     writer.writeln(f"enum {entity.name}Service {{")
 
@@ -785,7 +1072,7 @@ def _write_service_get(writer: IndentedWriter,
                        required_properties: List[Property] = [],
                        optional_properties: List[Property] = []) -> None:
     writer.writeln(
-        f"static func {camelcase(entity.name)}({', '.join(parameters)}) -> JSONDecodableOperation<{entity.name}> {{"
+        f"static func {camelcase(entity.name)}({', '.join(parameters)}) -> JSONOperation<{entity.name}> {{"
     )
 
     indented_writer = writer.indented()
@@ -808,7 +1095,7 @@ def _write_service_get(writer: IndentedWriter,
     indented_writer.newline()
 
     indented_writer.writeln(
-        f"return JSONDecodableOperation(path: path, headers: headers, input: input, output: {entity.name}.self)"
+        f"return JSONOperation(path: path, headers: headers, input: input)"
     )
 
     writer.writeln("}")
@@ -822,11 +1109,11 @@ def _write_service_put(writer: IndentedWriter,
                        optional_properties: List[Property] = []) -> None:
     if parameters:
         writer.writeln(
-            f"static func update({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> JSONDecodableOperation<{entity.name}> {{"
+            f"static func update({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> JSONOperation<{entity.name}> {{"
         )
     else:
         writer.writeln(
-            f"static func update(_ {_variable_name(entity.name)}: {entity.name}) -> JSONDecodableOperation<{entity.name}> {{"
+            f"static func update(_ {_variable_name(entity.name)}: {entity.name}) -> JSONOperation<{entity.name}> {{"
         )
 
     indented_writer = writer.indented()
@@ -852,7 +1139,7 @@ def _write_service_put(writer: IndentedWriter,
     indented_writer.newline()
 
     indented_writer.writeln(
-        f'return JSONDecodableOperation(path: path, method: .put, headers: headers, input: input, output: {entity.name}.self)'
+        f'return JSONOperation(path: path, method: .put, headers: headers, input: input)'
     )
 
     writer.writeln("}")
@@ -866,11 +1153,11 @@ def _write_service_post(writer: IndentedWriter,
                         optional_properties: List[Property] = []) -> None:
     if parameters:
         writer.writeln(
-            f"static func insert({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> JSONDecodableOperation<{entity.name}> {{"
+            f"static func insert({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> JSONOperation<{entity.name}> {{"
         )
     else:
         writer.writeln(
-            f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> JSONDecodableOperation<{entity.name}> {{"
+            f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> JSONOperation<{entity.name}> {{"
         )
 
     indented_writer = writer.indented()
@@ -896,7 +1183,7 @@ def _write_service_post(writer: IndentedWriter,
     indented_writer.newline()
 
     indented_writer.writeln(
-        f'return JSONDecodableOperation(path: path, method: .post, headers: headers, input: input, output: {entity.name}.self)'
+        f'return JSONOperation(path: path, method: .post, headers: headers, input: input)'
     )
 
     writer.writeln("}")
@@ -909,7 +1196,7 @@ def _write_service_delete(writer: IndentedWriter,
                           required_properties: List[Property] = [],
                           optional_properties: List[Property] = []) -> None:
     writer.writeln(
-        f"static func remove({', '.join(parameters)}) -> JSONDecodableOperation<{entity.name}> {{")
+        f"static func remove({', '.join(parameters)}) -> JSONOperation<{entity.name}> {{")
 
     indented_writer = writer.indented()
 
@@ -931,13 +1218,14 @@ def _write_service_delete(writer: IndentedWriter,
     indented_writer.newline()
 
     indented_writer.writeln(
-        f"return JSONDecodableOperation(path: path, method: .delete, headers: headers, input: input, output: {entity.name}.self)"
+        f"return JSONOperation(path: path, method: .delete, headers: headers, input: input)"
     )
 
     writer.writeln("}")
 
-def _get_shared_interface(message: Message) -> SharedInterface:
+def _get_shared_interface(message: Message, prefix: str) -> SharedInterface:
     variables = []
+    enums = []
 
     for property in message.properties:
         if property.method == "request":
@@ -950,11 +1238,15 @@ def _get_shared_interface(message: Message) -> SharedInterface:
         nullable = property.nullable
 
         if property.enum:
-            variable_type = name
-            assert False, "This is not supported, because of Swift :-("
+            variable_type = (prefix + message.name + "Entity" + name).replace(".", "")
+            enum_options = []
+            for enum_value in property.enum:
+                enum_options.append(enum_value)
+            enums.append((name, enum_options))
+            # assert False, "This is not supported, because of Swift :-("
         if nullable:
             variable_type += "?"
-        variables.append((name, variable_name, variable_type, None))
+        variables.append(Variable(name, variable_name, variable_type, True, nullable, None))
 
     for submessage in message.messages:
         name = submessage.name
@@ -983,28 +1275,14 @@ def _get_shared_interface(message: Message) -> SharedInterface:
 
         if nullable:
             variable_type += "?"
-        variables.append((name, variable_name, variable_type, submessage))
-    return SharedInterface(message.name, variables, message.interfaces)
+        variables.append(Variable(name, variable_name, variable_type, False, nullable, submessage))
+    return SharedInterface(message.name, variables, message.interfaces, enums)
 
 def _get_variables(message: Message, prefix: str, recursive: bool = False):
     nonnull_variables = []
     nullable_variables = []
     enums = []
     inner_classes = [] 
-
-    if recursive:
-        if len(message.extends) == 1:
-            result = _get_variables(message.extends[0].root, prefix, recursive)
-            nonnull_variables += result[0]
-            nullable_variables += result[1]
-            enums += result[2]
-            inner_classes += result[3]
-        for interface in message.interfaces:
-            result = _get_variables(interface.root, prefix, recursive)
-            nonnull_variables += result[0]
-            nullable_variables += result[1]
-            enums += result[2]
-            inner_classes += result[3]
 
     for property in message.properties:
         if property.method == "request":
@@ -1014,6 +1292,7 @@ def _get_variables(message: Message, prefix: str, recursive: bool = False):
         name = property.name
         variable_name = camelcase(name)
         variable_type = _swift_type(type)
+        variable_type_primitive = True
         nullable = property.nullable
 
         if property.enum:
@@ -1021,22 +1300,28 @@ def _get_variables(message: Message, prefix: str, recursive: bool = False):
             for enum_value in property.enum:
                 enum_options.append(enum_value)
             enums.append((name, enum_options))
-            variable_type = name
+            if message.is_interface:
+                variable_type = f"{message.name}Entity{name}"
+            else:
+                variable_type = name
         if nullable:
             variable_type += "?"
-            nullable_variables.append((name, variable_name, variable_type, None))
+            nullable_variables.append(Variable(name, variable_name, variable_type, variable_type_primitive, nullable, None))
         else:
-            nonnull_variables.append((name, variable_name, variable_type, None))
+            nonnull_variables.append(Variable(name, variable_name, variable_type, variable_type_primitive, nullable, None))
 
     for submessage in message.messages:
         name = submessage.name
         nullable = submessage.nullable
-
+        variable_type_primitive = False
         if submessage.is_array:
-            if not submessage.extends or (len(submessage.extends) == 1 and (submessage.properties or submessage.messages)):
+            if not submessage.extends or (submessage.interfaces and submessage.name != submessage.interfaces[0].name) or (len(submessage.extends) == 1 and (submessage.properties or submessage.messages)):
                 # inner class
                 inner_classes.append((submessage, prefix))
-                variable_type = "[" + prefix + name + "]"
+                if (submessage.interfaces and submessage.name != submessage.interfaces[0].name):
+                    variable_type = ("[" + prefix + name + "]").replace(".", "")
+                else:
+                    variable_type = ("[" + prefix + name + "]")
             elif len(submessage.extends) == 1:
                 # external class
                 variable_type = "[" + submessage.extends[0].name + "]"
@@ -1046,28 +1331,144 @@ def _get_variables(message: Message, prefix: str, recursive: bool = False):
                 variable_type = "[" + submessage.name + "]"
             else:
                 inner_classes.append((submessage, prefix))
-                if protocol_as_innerclass:
-                    variable_type = "[" + prefix + submessage.name + "]"
-                else:
-                    variable_type = ("[" + prefix + submessage.name + "]").replace(".", "")
+                variable_type = ("[" + prefix + submessage.name + "]").replace(".", "")
             variable_name = camelcase(name) + "List"
         else:
-            if not submessage.extends or (len(submessage.extends) == 1 and (submessage.properties or submessage.messages)):
+            if not submessage.extends or (submessage.interfaces and submessage.name != submessage.interfaces[0].name) or (len(submessage.extends) == 1 and (submessage.properties or submessage.messages)):
                 inner_classes.append((submessage, prefix))
-                variable_type = prefix + name
+                variable_type = (prefix + name)
             elif len(submessage.extends) == 1:
                 variable_type = submessage.extends[0].name
             else:
                 inner_classes.append((submessage, prefix))
-                variable_type = prefix + submessage.name
+                variable_type = (prefix + submessage.name).replace(".", "")
             variable_name = camelcase(name)
 
         if nullable:
             variable_type += "?"
-            nullable_variables.append((name, variable_name, variable_type, submessage))
+            nullable_variables.append(Variable(name, variable_name, variable_type, variable_type_primitive, nullable, submessage))
         else:
-            nonnull_variables.append((name, variable_name, variable_type, submessage))
+            nonnull_variables.append(Variable(name, variable_name, variable_type, variable_type_primitive, nullable, submessage))
+    
+    if recursive:
+        if len(message.extends) == 1:
+            result = _get_variables(message.extends[0].root, prefix, recursive)
+            nonnull_variables = result[0] + nonnull_variables
+            nullable_variables += result[1] + nullable_variables
+            enums += result[2]
+            inner_classes += result[3]
+        for interface in message.interfaces:
+            result = _get_variables(interface.root, prefix, recursive)
+            for variable in result[0]:
+                if variable not in nonnull_variables:
+                    nonnull_variables.insert(0, variable)
+            for variable in result[1]:
+                if variable not in nullable_variables:
+                    nullable_variables.insert(0, variable)
+            enums += result[2]
+            inner_classes += result[3]
+
+
     return nonnull_variables, nullable_variables, enums, inner_classes
+
+# dependencies of an entity
+# - the direct parent logic file (for extends) "A extends B"
+
+# - the logic file itself (in case of inner classes)
+#   - parent logic files of inner classes
+
+# - all (in)direct top level nonnull messages that extend an entity and keep same name (for constructor) A(X x){super(x)}
+def _get_constructor_dependencies(entity: Entity):
+    dependencies = []
+    if len(entity.root.extends) == 1:
+        dependencies += _get_constructor_dependencies(entity.root.extends[0])
+
+    for message in entity.root.messages:
+        if message.nullable:
+            continue
+        if len(message.extends) == 1:
+            if message.is_non_empty:
+                dependencies.append(entity)
+            else:
+                dependencies.append(message.extends[0])
+        elif len(message.extends) > 1:
+            shared_interface = _get_shared_interface(entity.root, '')
+            for parent in shared_interface.parents:
+                dependencies.add(parent)
+        else:
+            dependencies.append(entity)
+    return dependencies
+
+def _get_variable_dependencies(entity: Entity, root: Message, logic: bool = False):
+    dependencies = []
+    for message in root.messages:
+        if message.nullable and logic:
+            continue
+        
+        if message.interfaces:
+            for interface in message.interfaces:
+                dependencies.append(interface)
+                dependencies += _get_variable_dependencies(interface, interface.root, logic)
+        
+        if message.extends:
+            for extends in message.extends:
+                if message.is_non_empty:
+                    # we will have an inner class for this variable
+                    dependencies.append(extends)
+                    dependencies.append(entity)
+                else:                    
+                    dependencies.append(extends)
+                dependencies += _get_constructor_dependencies(extends)
+            if len(message.extends) > 1:
+                dependencies.append(entity)
+        else:
+            # we will have an inner class for this variable
+            if not logic:
+                dependencies.append(entity)
+        for submessage in message.messages:
+            if submessage.nullable and logic:
+                continue
+            if submessage.extends:
+                for extends in submessage.extends:
+                    dependencies.append(extends)
+                    if extends.name != submessage.name and submessage.is_non_empty:
+                        dependencies += _get_variable_dependencies(extends, extends.root, logic)
+                        dependencies += _get_variable_dependencies(extends, submessage, logic)
+                if len(submessage.extends) > 1:
+                    dependencies.append(entity)
+            else:
+                dependencies += _get_variable_dependencies(entity, submessage, logic)
+    return dependencies
+
+
+def _get_dependencies(entity: Entity, logic: bool = False):
+    dependencies = []
+    if entity.root.extends:
+        for extends in entity.root.extends:
+            dependencies.append(extends)
+            dependencies += _get_constructor_dependencies(extends)
+
+    for interface in entity.root.interfaces:
+        dependencies.append(interface)
+        dependencies += _get_variable_dependencies(interface, interface.root, logic)
+
+    dependencies += _get_variable_dependencies(entity, entity.root, logic)
+
+    return dependencies
+
+
+def _package(path: pathlib.Path, start: str = None) -> str:
+    parts: List[str] = []
+    match = False
+    for part in path.parts:
+        if part == start or start is None:
+            match = True
+
+        if match:
+            parts.append(part)
+
+    return ".".join(parts)
+
 
 def _to_case(s: str) -> str:
     if s.isupper():
@@ -1101,6 +1502,15 @@ def _variable_name(name: str):
 
 def _capitalize_path(path: pathlib.Path) -> pathlib.Path:
     return pathlib.Path(*map(capitalize, path.parts))
+
+def already_implements(message: Message, interface: SharedInterface) -> bool:
+    for existing_interface in message.interfaces:
+        if existing_interface.name == interface.name:
+            return True
+    if not message.extends:
+        return False
+    else:
+        return already_implements(message.extends[0].root, interface)
 
 
 def _swift_type(type: str) -> str:

@@ -1,4 +1,4 @@
-import os
+import os, io
 
 
 class IndentedWriter(object):
@@ -8,7 +8,10 @@ class IndentedWriter(object):
         self.indentation = " " * indent
 
     def __enter__(self):
-        self.fp = open(self.path, "w")
+        if self.path is not None:
+            self.fp = open(self.path, "w")
+        else:
+            self.fp = io.StringIO("")
 
         return self
 

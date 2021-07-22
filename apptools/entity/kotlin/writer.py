@@ -534,7 +534,7 @@ def _write_datamodel_class(writer: IndentedWriter,
                 else:
                     indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}.map {{ it.copy() }}.map {{ it as {variable.type[12:-1]} }}.toMutableList()")
             else:
-                indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}{'?' if variable.nullable else ''}.copy()")
+                indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}{'?' if variable.nullable else ''}.copy() as {variable.type}")
     indented_writer.writeln("}")
     indented_writer.newline()
     

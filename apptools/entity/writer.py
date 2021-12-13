@@ -3,10 +3,9 @@ import urllib.parse
 import xml.etree.ElementTree as ElementTree
 
 from typing import Callable, List, Any, NamedTuple, Dict, Optional, Set, MutableMapping, Mapping
-from xml.etree.ElementTree import Element
+from xml.etree.ElementTree import Element, XML
 
 from apptools.entity.navajo import Entity, Message, Property
-from apptools.entity.request import Network
 
 Options = Dict[str, Any]
 Writer = Callable[[List[Entity], Options], int]
@@ -14,102 +13,88 @@ Writer = Callable[[List[Entity], Options], int]
 
 def write(writer: Writer, options: Options) -> int:
     input: pathlib.Path = options["input"]
-    username: str = options["username"]
-    password: str = options["password"]
-    includes: List[str] = options.get("entities", None)
-    skips: List[str] = options.get("skip", None)
 
-    paths = _entity_mappings_paths(input, includes, skips)
-    mappings = _fetch(paths, username, password)
+    paths = _api(input)
+    mappings = _read(input, paths)
     entities = _entities(input, mappings)
 
     return writer(entities, options)
 
 
-def _entity_mappings_paths(path: pathlib.Path,
-                           includes: Optional[List[str]],
-                           skips: Optional[List[str]]) -> Set[pathlib.Path]:
-    paths: Set[pathlib.Path] = set()
-    for file in path.rglob("*entitymapping.xml"):
-        print(f"Parsing entity mapping: {file}")
+def _api(path: pathlib.Path) -> set[pathlib.Path]:
+    """
+    Reads all the entity mapping files recursively at `path` and gets
+    all the exposed entities paths.
 
-        parsed = ElementTree.parse(str(file))
+    The exposed entities can reach outside the path scope.
+
+        Parameters:
+            path (pathlib.Path): Root directory of the api
+
+        Returns:
+            set[pathlib.Path]: All unique exposed entity paths
+    """
+    paths: set[pathlib.Path] = set()
+    for path in path.rglob("entitymapping.xml"):
+        parsed = ElementTree.parse(path)
         for property in parsed.findall(".//property[@name='entity']"):
-            value = property.get("value")
-            if value is not None:
-                path = pathlib.Path("entity", value)
-                if (includes is None or str(path) in includes) and (skips is None or str(path) not in skips):
-                    paths.add(path)
-
+            paths.add(pathlib.Path("entity", property.get("value")))
     return paths
 
 
-def _included(path: pathlib.Path, includes: Optional[List[str]]) -> bool:
-    if includes is None:
-        return True
-
-    return str(path) in includes
-
-
-def _fetch(paths: Set[pathlib.Path], username: str,
-           password: str) -> Mapping[pathlib.Path, Element]:
-    network = Network(username, password)
-
+def _read(input: pathlib.Path, paths: Set[pathlib.Path]) -> Mapping[pathlib.Path, Element]:
     mapping: MutableMapping[pathlib.Path, Element] = {}
 
-    def fetch(paths: Set[pathlib.Path]):
-        for path in paths:
-            # Avoid calling the same paths because they're reused somewhere
-            # else.
-            if path in mapping:
+    scripts: pathlib.Path = input
+    while scripts.name != "entity":
+        scripts = scripts.parent
+    scripts = scripts.parent
+
+    for path in paths:
+        entity_path = pathlib.Path(scripts, path).with_suffix(".xml")
+        print(f"Fetch path {entity_path}")
+
+        element = ElementTree.parse(entity_path).getroot()
+
+        mapping[path] = element
+
+        # Find all extension of the highest version of the entity. We need to load them as well.
+        name = path.stem
+        extensions: Set[pathlib.Path] = set()
+        version = _version(name, element)
+        root = _root(name, version, element)
+        for message in root.findall(".//message[@extends]"):
+            extends = message.get("extends")
+            if extends is None:
                 continue
+            extends = extends.removeprefix("navajo://")
+            for extends_item in extends.split(","):
+                extension = pathlib.Path("entity",
+                                     *_extends(extends_item).path.parts)
+                extensions.add(extension)
 
-            name = path.stem
+        if root.get("extends") is not None:
+            extends = root.get("extends")
+            extends = extends.removeprefix("navajo://")
+            for extends_item in extends.split(","):
+                extension = pathlib.Path("entity",
+                                     *_extends(extends_item).path.parts)
+                extensions.add(extension)
 
-            print(f"Fetch {name}")
-
-            # Requesting the entity requires a unix path.
-            element = network.request(str(path.as_posix()))
-            mapping[path] = element
-
-            # Find all extension of the highest version of the entity. We need to load them as well.
-            extensions: Set[pathlib.Path] = set()
-            version = _version(name, element)
-            root = _root(name, version, element)
-            for message in root.findall(".//message[@extends]"):
-                extends = message.get("extends")
-                if extends is None:
-                    continue
-                extends = extends.removeprefix("navajo://")
-                for extends_item in extends.split(","):
-                    extension = pathlib.Path("entity",
-                                         *_extends(extends_item).path.parts)
-                    extensions.add(extension)
-
-            if root.get("extends") is not None:
-                extends = root.get("extends")
-                extends = extends.removeprefix("navajo://")
-                for extends_item in extends.split(","):
-                    extension = pathlib.Path("entity",
-                                         *_extends(extends_item).path.parts)
-                    extensions.add(extension)
-
-            for message in root.findall(".//message[@subtype]"):
-                interfaces = _get_message_interfaces(message.get("subtype"))
-                if interfaces is not None:
-                    for interface in interfaces:
-                        extension = pathlib.Path("entity", interface)
-                        extensions.add(extension)
-            
-            interfaces = _get_message_interfaces(root.get("subtype"))
+        for message in root.findall(".//message[@subtype]"):
+            interfaces = _get_message_interfaces(message.get("subtype"))
             if interfaces is not None:
                 for interface in interfaces:
                     extension = pathlib.Path("entity", interface)
                     extensions.add(extension)
 
-            fetch(extensions)
+        interfaces = _get_message_interfaces(root.get("subtype"))
+        if interfaces is not None:
+            for interface in interfaces:
+                extension = pathlib.Path("entity", interface)
+                extensions.add(extension)
 
-    fetch(paths)
+        mapping |= _read(input, extensions)
 
     return mapping
 

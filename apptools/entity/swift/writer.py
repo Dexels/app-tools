@@ -65,7 +65,7 @@ def write(entities: List[Entity], options: Dict[str, Any]) -> None:
         _write_entity(entity, output, force)
 
 def _write_entity(entity: Entity, output: pathlib.Path, force: bool):
-    datamodel = output / _capitalize_path(entity.package / "datamodel")
+    datamodel = output / _capitalize_path(entity.package) / "DataModel"
     datamodel.mkdir(parents=True, exist_ok=True)
     datamodel_class = datamodel / f"{entity.name}Entity.swift"
 
@@ -74,7 +74,7 @@ def _write_entity(entity: Entity, output: pathlib.Path, force: bool):
 
         _write_datamodel(writer, entity)
 
-    logic = output / _capitalize_path(entity.package / "logic")
+    logic = output / _capitalize_path(entity.package) / "Logic"
     logic.mkdir(parents=True, exist_ok=True)
     logic_class = logic / f"{entity.name}.swift"
 
@@ -85,7 +85,7 @@ def _write_entity(entity: Entity, output: pathlib.Path, force: bool):
             _write_logic(writer, entity)
 
     if entity.methods:
-        service = output / _capitalize_path(entity.package / "service")
+        service = output / _capitalize_path(entity.package) / "Service"
         service.mkdir(parents=True, exist_ok=True)
         service_class = service / f"{entity.name}Service.swift"
 

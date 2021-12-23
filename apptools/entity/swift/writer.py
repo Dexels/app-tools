@@ -462,7 +462,7 @@ def _write_datamodel_class(writer: IndentedWriter,
     indented_writer.indented().write(f"let copy = {logic_type}(")
     items = []
     for variable in constructor_vars:
-        items.append(f"{variable.name}: {variable.name}{f'.map {{ ($0 as! Entity).copy() as! {variable.type[1:-1]} }}' if variable.name.endswith('List') else ''}{'' if variable.primitive or variable.name.endswith('List') else ('.copy() as! ' + variable.type)}")
+        items.append(f"{variable.name}: {variable.name}{f'.map {{ $0.copy() as! {variable.type[1:-1]} }}' if variable.name.endswith('List') else ''}{'' if variable.primitive or variable.name.endswith('List') else ('.copy() as! ' + variable.type)}")
     indented_writer.append(", ".join(items))
     indented_writer.appendln(")")
     indented_writer.indented().writeln(f"copy.copyNullableVariables(from: self as! {logic_type})")
@@ -504,7 +504,7 @@ def _write_datamodel_class(writer: IndentedWriter,
             indented_writer.indented().indented().indented().writeln(f"&& {variable.name} == other.{variable.name}")
         else:
             if variable.name.endswith("List"):
-                indented_writer.indented().indented().indented().writeln(f"&& {f'if ({variable.name} == null || other.{variable.name} == null) {variable.name} == other.{variable.name} else' if variable.nullable else ''} self.{variable.name}.count == other.{variable.name}.count && zip({variable.name}, other.{variable.name}).allSatisfy {{ ($0.0 as! Entity).deepEquals(other: ($0.1 as! Entity)) }}")
+                indented_writer.indented().indented().indented().writeln(f"&& {f'if ({variable.name} == null || other.{variable.name} == null) {variable.name} == other.{variable.name} else' if variable.nullable else ''} self.{variable.name}.count == other.{variable.name}.count && zip({variable.name}, other.{variable.name}).allSatisfy {{ $0.0.deepEquals(other: $0.1) }}")
             else:
                 indented_writer.indented().indented().indented().writeln(f"&& {f'if ({variable.name} == null) other.{variable.name} == null else {variable.name}?' if variable.nullable else variable.name}.deepEquals(other: other.{variable.name}){' == true' if variable.nullable else ''}")
     indented_writer.indented().writeln("} else {")

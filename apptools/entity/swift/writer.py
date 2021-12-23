@@ -61,31 +61,14 @@ def write(entities: List[Entity], options: Dict[str, Any]) -> None:
     force = options.get("force", False)
     debug = options.get("debug", False)
 
-    paths: Set[pathlib.Path] = set()
     for entity in entities:
-        paths |= _write_entity(entity, output, force)
+        _write_entity(entity, output, force)
 
-    if paths:
-        xcode = pathlib.Path(__file__).parent / "xcode.rb"
-        xcodeproj = options["xcodeproj"]
-
-        # Xcode tool works with relative paths from the xcodeproj file
-        rel_paths = [path.relative_to(xcodeproj.parent) for path in paths]
-        os.system(
-            f"ruby {xcode} {xcodeproj} {' '.join([str(path) for path in rel_paths])}"
-        )
-
-
-def _write_entity(entity: Entity, output: pathlib.Path, force: bool) -> Set[pathlib.Path]:
-    paths: Set[pathlib.Path] = set()
-
+def _write_entity(entity: Entity, output: pathlib.Path, force: bool):
     datamodel = output / _capitalize_path(entity.package / "datamodel")
     datamodel.mkdir(parents=True, exist_ok=True)
     datamodel_class = datamodel / f"{entity.name}Entity.swift"
 
-    if not datamodel_class.exists():
-        paths.add(datamodel_class)
-        
     with IndentedWriter(path=datamodel_class) as writer:
         print(f"Write {str(datamodel_class)}")
 
@@ -96,8 +79,6 @@ def _write_entity(entity: Entity, output: pathlib.Path, force: bool) -> Set[path
     logic_class = logic / f"{entity.name}.swift"
 
     if force or not logic_class.exists():
-        paths.add(logic_class)
-
         with IndentedWriter(path=logic_class) as writer:
             print(f"Write {str(logic_class)}")
 
@@ -108,15 +89,10 @@ def _write_entity(entity: Entity, output: pathlib.Path, force: bool) -> Set[path
         service.mkdir(parents=True, exist_ok=True)
         service_class = service / f"{entity.name}Service.swift"
 
-        if not service_class.exists():
-            paths.add(service_class)
-
         with IndentedWriter(path=service_class) as writer:
             print(f"Write {str(service_class)}")
 
             _write_service(writer, entity)
-
-    return paths
 
 
 def _write_datamodel(writer: IndentedWriter, entity: Entity) -> None:

@@ -9,9 +9,6 @@ setuptools.setup(
     author="Dexelonian",
     author_email="info@dexels.com",
     packages=setuptools.find_packages(exclude=["test"]),
-    package_data={
-        '': ['xcode.rb'],
-    },
     install_requires=["cairosvg~=2.5.1"],
     python_requires=">=3.7",
     entry_points="""

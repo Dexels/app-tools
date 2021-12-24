@@ -97,10 +97,6 @@ def _write_entity(entity: Entity, output: pathlib.Path, force: bool):
 
 def _write_datamodel(writer: IndentedWriter, entity: Entity) -> None:
     global protocol_as_innerclass
-    writer.writeln(
-        "// swiftlint:disable type_body_length file_length line_length identifier_name superfluous_disable_command"
-    )
-    writer.newline()
     writer.writeln("import Foundation")
     writer.writeln("import SendratoAppSDK")
     writer.newline()
@@ -967,10 +963,6 @@ def _write_logic_class(writer: IndentedWriter, message: Message, shared_interfac
 
 
 def _write_service(writer: IndentedWriter, entity: Entity) -> None:
-    writer.writeln(
-        f"// swiftlint:disable function_parameter_count superfluous_disable_command"
-    )
-    writer.newline()
     writer.writeln(f"import Alamofire")
     writer.writeln(f"import SendratoAppSDK")
     writer.newline()

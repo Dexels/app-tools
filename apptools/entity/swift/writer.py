@@ -594,7 +594,7 @@ def _write_coding(writer: IndentedWriter,
                     f'case {variable.name} = "{variable.network_name}"')
         
         writer.indented().writeln(
-                f'case __type__ = "__type__"')
+                f'case entityType = "__type__"')
 
         writer.writeln("}")
 
@@ -622,7 +622,7 @@ def _write_coding(writer: IndentedWriter,
                         indented_writer.writeln(f"var {variable.name} = {variable.type}()")
                         indented_writer.writeln(f"while !{variable.name}NestedUnkeyedContainer.isAtEnd {{")
                         indented_indented_writer.writeln(f"let typeContainer = try {variable.name}NestedUnkeyedContainer.nestedContainer(keyedBy: CodingKeys.self)")
-                        indented_indented_writer.writeln("let type = try typeContainer.decode(String.self, forKey: .__type__)")
+                        indented_indented_writer.writeln("let type = try typeContainer.decode(String.self, forKey: .entityType)")
                         indented_indented_writer.writeln("switch type {")
                         for extends in variable.message.extends:
                             indented_indented_writer.indented().writeln(f'case "{pathlib.Path(*extends.path.parts[1:])}":')
@@ -634,7 +634,7 @@ def _write_coding(writer: IndentedWriter,
                         indented_writer.writeln(f"self.{variable.name} = {variable.name}")
                     else:
                         indented_writer.writeln(f"let typeContainer = try {variable.name}NestedUnkeyedContainer.nestedContainer(keyedBy: CodingKeys.self)")
-                        indented_writer.writeln("let type = try typeContainer.decode(String.self, forKey: .__type__)")
+                        indented_writer.writeln("let type = try typeContainer.decode(String.self, forKey: .entityType)")
                         indented_writer.writeln("switch type {")
                         for extends in variable.message.extends:
                             indented_indented_writer.writeln(f'case "{pathlib.Path(*extends.path.parts[1:])}":')
@@ -655,7 +655,7 @@ def _write_coding(writer: IndentedWriter,
                         indented_writer.writeln(f"var {variable.name} = {variable.type}()")
                         indented_writer.writeln(f"while !{variable.name}NestedUnkeyedContainer.isAtEnd {{")
                         indented_indented_writer.writeln(f"let typeContainer = try {variable.name}NestedUnkeyedContainer.nestedContainer(keyedBy: CodingKeys.self)")
-                        indented_indented_writer.writeln("let type = try typeContainer.decodeIfPresent(String.self, forKey: .__type__)")
+                        indented_indented_writer.writeln("let type = try typeContainer.decodeIfPresent(String.self, forKey: .entityType)")
                         indented_indented_writer.writeln("switch type {")
                         for extends in variable.message.extends:
                             indented_indented_writer.indented().writeln(f'case "{pathlib.Path(*extends.path.parts[1:])}":')
@@ -667,7 +667,7 @@ def _write_coding(writer: IndentedWriter,
                         indented_writer.writeln(f"self.{variable.name} = {variable.name}")
                     else:
                         indented_writer.writeln(f"let typeContainer = try {variable.name}NestedUnkeyedContainer.nestedContainer(keyedBy: CodingKeys.self)")
-                        indented_writer.writeln("let type = try typeContainer.decodeIfPresent(String.self, forKey: .__type__)")
+                        indented_writer.writeln("let type = try typeContainer.decodeIfPresent(String.self, forKey: .entityType)")
                         indented_writer.writeln("switch type {")
                         for extends in variable.message.extends:
                             indented_indented_writer.writeln(f'case "{pathlib.Path(*extends.path.parts[1:])}":')
@@ -728,7 +728,7 @@ def _write_coding(writer: IndentedWriter,
                         indented_indented_writer.writeln("switch element {")
                         for extends in variable.message.extends:
                             indented_indented_writer.indented().writeln(f"case let {camelcase(extends.name)} as {codingPrefix}{extends.name}:")
-                            indented_indented_indented_writer.indented().writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .__type__)')
+                            indented_indented_indented_writer.indented().writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .entityType)')
                             indented_indented_indented_writer.indented().writeln(f"try {variable.name}Container.encode({camelcase(extends.name)})")
                         indented_indented_writer.indented().writeln(f"default:")
                         indented_indented_indented_writer.indented().writeln(f'fatalError("should not happen")')
@@ -739,7 +739,7 @@ def _write_coding(writer: IndentedWriter,
                         indented_writer.writeln(f"switch {variable.name} {{")
                         for extends in variable.message.extends:
                             indented_indented_writer.writeln(f"case let {camelcase(extends.name)} as {codingPrefix}{extends.name}:")
-                            indented_indented_indented_writer.writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .__type__)')
+                            indented_indented_indented_writer.writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .entityType)')
                             indented_indented_indented_writer.writeln(f"try {variable.name}Container.encode({camelcase(extends.name)})")
                         indented_indented_writer.writeln(f"default:")
                         indented_indented_indented_writer.writeln(f'fatalError("should not happen")')
@@ -758,7 +758,7 @@ def _write_coding(writer: IndentedWriter,
                         indented_indented_writer.writeln("switch element {")
                         for extends in variable.message.extends:
                             indented_indented_writer.indented().writeln(f"case let {camelcase(extends.name)} as {codingPrefix}{extends.name}:")
-                            indented_indented_indented_writer.indented().writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .__type__)')
+                            indented_indented_indented_writer.indented().writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .entityType)')
                             indented_indented_indented_writer.indented().writeln(f"try {variable.name}Container.encode({camelcase(extends.name)})")
                         indented_indented_writer.indented().writeln(f"default:")
                         indented_indented_indented_writer.indented().writeln(f'break')
@@ -769,7 +769,7 @@ def _write_coding(writer: IndentedWriter,
                         indented_writer.writeln(f"switch {variable.name} {{")
                         for extends in variable.message.extends:
                             indented_indented_writer.writeln(f"case let {camelcase(extends.name)} as {codingPrefix}{extends.name}:")
-                            indented_indented_indented_writer.writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .__type__)')
+                            indented_indented_indented_writer.writeln(f'try typeContainer.encode("{pathlib.Path(*extends.path.parts[1:])}", forKey: .entityType)')
                             indented_indented_indented_writer.writeln(f"try {variable.name}Container.encode({camelcase(extends.name)})")
                         indented_indented_writer.writeln(f"default:")
                         indented_indented_indented_writer.writeln(f'break')

@@ -167,25 +167,6 @@ def _is_nullable(subtype: Optional[str], fallback: bool) -> bool:
                 return subtype_info_value == "true"
     return fallback
 
-def _is_message_interface(subtype: Optional[str]) -> bool:
-    if subtype is not None:
-        for subtype_info in subtype.split(","):
-            subtype_info_key = subtype_info.split("=")[0]
-            subtype_info_value = subtype_info.split("=")[1]
-            if subtype_info_key == "isInterface":
-                return subtype_info_value == "true"
-    return False
-
-def _get_message_interfaces(subtype: Optional[str]) -> Optional[str]:
-    if subtype is not None:
-        for subtype_info in subtype.split(","):
-            subtype_info_key = subtype_info.split("=")[0]
-            subtype_info_value = subtype_info.split("=")[1]
-            if subtype_info_key == "interface":
-                return subtype_info_value.split(';')
-    return None
-
-
 def _enum(subtype: Optional[str]) -> Optional[List[str]]:
     if subtype is not None:
         for subtype_info in subtype.split(","):

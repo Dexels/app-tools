@@ -15,86 +15,29 @@ def write(writer: Writer, options: Options) -> int:
     input: pathlib.Path = options["input"]
 
     paths = _api(input)
-    mappings = _read(input, paths)
+    mappings = _parse(input, paths)
     entities = _entities(input, mappings)
 
     return writer(entities, options)
 
 
 def _api(path: pathlib.Path) -> set[pathlib.Path]:
-    """
-    Reads all the entity mapping files recursively at `path` and gets
-    all the exposed entities paths.
-
-    The exposed entities can reach outside the path scope.
-
-        Parameters:
-            path (pathlib.Path): Root directory of the api
-
-        Returns:
-            set[pathlib.Path]: All unique exposed entity paths
-    """
     paths: set[pathlib.Path] = set()
-    for path in path.rglob("entitymapping.xml"):
-        parsed = ElementTree.parse(path)
-        for property in parsed.findall(".//property[@name='entity']"):
-            paths.add(pathlib.Path("entity", property.get("value")))
+    for path in path.rglob("*.xml"):
+        # In the future this statement can possibly be removed since we might
+        # want everything to be exposed that is defined.
+        if path.stem == "entitymapping":
+            continue
+        paths.add(path)
     return paths
 
 
-def _read(input: pathlib.Path, paths: Set[pathlib.Path]) -> Mapping[pathlib.Path, Element]:
+def _parse(input: pathlib.Path, paths: Set[pathlib.Path]) -> Mapping[pathlib.Path, Element]:
     mapping: MutableMapping[pathlib.Path, Element] = {}
 
-    scripts: pathlib.Path = input
-    while scripts.name != "entity":
-        scripts = scripts.parent
-    scripts = scripts.parent
-
     for path in paths:
-        entity_path = pathlib.Path(scripts, path).with_suffix(".xml")
-        print(f"Fetch path {entity_path}")
-
-        element = ElementTree.parse(entity_path).getroot()
-
-        mapping[path] = element
-
-        # Find all extension of the highest version of the entity. We need to load them as well.
-        name = path.stem
-        extensions: Set[pathlib.Path] = set()
-        version = _version(name, element)
-        root = _root(name, version, element)
-        for message in root.findall(".//message[@extends]"):
-            extends = message.get("extends")
-            if extends is None:
-                continue
-            extends = extends.removeprefix("navajo://")
-            for extends_item in extends.split(","):
-                extension = pathlib.Path("entity",
-                                     *_extends(extends_item).path.parts)
-                extensions.add(extension)
-
-        if root.get("extends") is not None:
-            extends = root.get("extends")
-            extends = extends.removeprefix("navajo://")
-            for extends_item in extends.split(","):
-                extension = pathlib.Path("entity",
-                                     *_extends(extends_item).path.parts)
-                extensions.add(extension)
-
-        for message in root.findall(".//message[@subtype]"):
-            interfaces = _get_message_interfaces(message.get("subtype"))
-            if interfaces is not None:
-                for interface in interfaces:
-                    extension = pathlib.Path("entity", interface)
-                    extensions.add(extension)
-
-        interfaces = _get_message_interfaces(root.get("subtype"))
-        if interfaces is not None:
-            for interface in interfaces:
-                extension = pathlib.Path("entity", interface)
-                extensions.add(extension)
-
-        mapping |= _read(input, extensions)
+        print(f"Fetch path {path}")
+        mapping[path] = ElementTree.parse(path).getroot()
 
     return mapping
 
@@ -102,15 +45,13 @@ def _read(input: pathlib.Path, paths: Set[pathlib.Path]) -> Mapping[pathlib.Path
 def _entities(input: pathlib.Path, mappings: Mapping[pathlib.Path,
                                                      Element]) -> List[Entity]:
     return [
-        _entity(input, path, element, mappings, None)
+        _entity(input, path, element, mappings)
         for path, element in mappings.items()
     ]
 
 
 def _entity(input: pathlib.Path, path: pathlib.Path, element: Element,
-            mappings: Mapping[pathlib.Path, Element], query: str) -> Entity:
-    print(f"Parsing {path}")
-
+            mappings: Mapping[pathlib.Path, Element]) -> Entity:
     name = path.stem
     version = _version(name, element)
     root = _root(name, version, element)
@@ -118,7 +59,7 @@ def _entity(input: pathlib.Path, path: pathlib.Path, element: Element,
     message = _message(input, path, root, mappings)
     package = _package(input, path, name)
 
-    return Entity(name, path, package, version, methods, message, query)
+    return Entity(name, path, package, version, methods, message)
 
 
 def _version(name: str, element: Element) -> int:
@@ -148,23 +89,14 @@ def _root(name: str, version: int, element: Element) -> Element:
 
 def _methods(element: Element) -> List[str]:
     return [
-        operation.get("method") or "GET"
+        operation.get("method")
         for operation in element.findall("operations/operation")
     ]
 
 
 def _package(input: pathlib.Path, path: pathlib.Path,
              name: str) -> pathlib.Path:
-    folder = pathlib.Path(*input.parts[input.parts.index("entity"):])
-
-    package = path.parts
-    for part in folder.parts:
-        if part == package[0]:
-            package = package[1:]
-        else:
-            break
-
-    return pathlib.Path(*package).parent
+    return pathlib.Path(str(path).removeprefix(str(input) + "/")).parent
 
 
 def _message(input: pathlib.Path, path: pathlib.Path, element: Element,
@@ -190,31 +122,18 @@ def _message(input: pathlib.Path, path: pathlib.Path, element: Element,
     properties = [_property(property) for property in properties_raw]
     messages = [_message(input, path, message, mappings) for message in messages_raw]
 
-    is_interface = _is_message_interface(definition.get("subtype"))
-    interfaces = _get_message_interfaces(definition.get("subtype"))
-    super_interfaces: List[Entity] = []
-    if interfaces is not None:
-        for interface in interfaces:
-            extends = _extends(interface)
-            extension = pathlib.Path("entity", *extends.path.parts)
-            # extension = pathlib.Path("entity", interface)
-            super_interface = _entity(input, extension, mappings[extension], mappings, extends.query)
-            super_interfaces.append(super_interface)
-
-            assert extends.name.version == super_interface.version, f"Version error: Entity at {path} includes an interface of {parent.name} with version {extends.name.version}, but should be {parent.version}"
-
     parents: List[Entity] = []
     if extends_raw is not None:
-        extends_raw = extends_raw.removeprefix("navajo://")
         for extends_item in extends_raw.split(","):
             extends = _extends(extends_item)
-            extension = pathlib.Path("entity", *extends.path.parts)
-            parent = _entity(input, extension, mappings[extension], mappings, extends.query)
+            extension = pathlib.Path(*extends.path.parts)
+            dir = pathlib.Path(*input.parts[:input.parts.index("entities")])
+            parent = _entity(input, extension, mappings[dir / "entities" / (str(extension) + ".xml")], mappings)
             parents.append(parent)
 
             assert extends.name.version == parent.version, f"Version error: Entity at {path} includes an extension of {parent.name} with version {extends.name.version}, but should be {parent.version}"
 
-    return Message(name, is_array, nullable, properties, messages, parents, super_interfaces, is_interface)
+    return Message(name, is_array, nullable, properties, messages, parents)
 
 
 def _property(element: Element) -> Property:
@@ -303,16 +222,16 @@ def _get_key_ids(key: Optional[str]) -> List[str]:
 
 
 Name = NamedTuple("Name", [("base", str), ("version", int)])
-Extends = NamedTuple("Extends", [("name", Name), ("path", pathlib.Path), ("query", str)])
+Extends = NamedTuple("Extends", [("name", Name), ("path", pathlib.Path)])
 
 
 def _extends(raw: str) -> Extends:
-    components = urllib.parse.urlparse("navajo://" + raw)
-    path = pathlib.Path(components.netloc) / pathlib.Path(components.path[1:])
+    components = urllib.parse.urlparse(raw)
+    path = pathlib.Path(components.netloc) / pathlib.Path(components.path)
     name = _name(path.name)
     path = path.with_name(name.base)
     
-    return Extends(name, path, components.query)
+    return Extends(name, path)
 
 
 def _name(raw: str) -> Name:

@@ -22,8 +22,7 @@ class Property(object):
 class Message(object):
     def __init__(self, name: str, is_array: bool, nullable: bool,
                  properties: List[Property], messages: List["Message"],
-                 extends: List["Entity"], interfaces: List["Entity"], 
-                 is_interface: bool):
+                 extends: List["Entity"]):
         super().__init__()
 
         self.name = name
@@ -32,9 +31,7 @@ class Message(object):
         self.properties = properties
         self.messages = messages
         self.extends = extends
-        self.interfaces = interfaces
-        self.is_interface = is_interface
-        self.is_non_empty = (len(properties) + len(messages) + len(interfaces))
+        self.is_non_empty = len(properties) + len(messages)
 
     def __eq__(self, other):
         return True
@@ -42,7 +39,7 @@ class Message(object):
 
 class Entity(object):
     def __init__(self, name: str, path: pathlib.Path, package: pathlib.Path,
-                 version: int, methods: List[str], root: Message, query: str) -> None:
+                 version: int, methods: List[str], root: Message) -> None:
         super().__init__()
 
         self.name = name
@@ -51,7 +48,6 @@ class Entity(object):
         self.version = version
         self.methods = methods
         self.root = root
-        self.query = query
 
     def key_properties(self, key_id) -> List[Property]:
         result = []

@@ -179,10 +179,7 @@ def _write_service_typeadapterfactories(writer: IndentedWriter, message: Message
     if len(message.extends) > 1:
         indented_writer.writeln("RuntimeTypeAdapterFactory")
         indented_indented_writer = indented_writer.indented()
-        if message.interfaces and message.name == message.interfaces[0].name:
-            indented_indented_writer.writeln(f'.of({message.name}::class.java, "__type__")')
-        else:
-            indented_indented_writer.writeln(f'.of({prefix}::class.java, "__type__")')
+        indented_indented_writer.writeln(f'.of({prefix}::class.java, "__type__")')
         for extends in message.extends:
             indented_indented_writer.writeln(f'.registerSubtype({prefix}{extends.name}::class.java, "{pathlib.Path(*extends.path.parts[1:])}")')
     elif len(message.extends) == 1:
@@ -227,58 +224,20 @@ def _write_datamodel_inner(writer: IndentedWriter,
                            message: Message,
                            import_list: Set,
                            prefix: str = '') -> Set:
-    if message.is_interface:
+    if len(message.extends) > 1:
         shared_interface = _get_shared_interface(message)
-        parents = []
-        parents.append("Serializable")
-        parents.append("Entity")
-        for parent in shared_interface.parents:
-            parents.append(f"{parent.name}, " )
-        writer.writeln(f"interface {message.name}Entity : {', '.join(parents)} {{")
+
+        writer.writeln(f"interface {message.name}Entity : Entity {{")
         indented_writer = writer.indented()
-        
         for enum in shared_interface.enums:
             indented_writer.writeln(f"enum class {enum[0]} {{")
             indented_writer.indented().writeln(f'{", ".join(enum[1])}')
             indented_writer.writeln(f"}}")
             writer.newline()
         for variable in shared_interface.variables:
-            indented_writer.writeln(f"var {variable.name}: {variable.type}" )
-        if message.messages:
-            variables = _get_variables(message, prefix + message.name + ".")
-            for inner_class in variables[3]:
-                import_list.update(_write_datamodel_inner(indented_writer, inner_class[0], import_list, inner_class[1]))
-        
-        else:
-            writer.newline()
-        
+            indented_writer.writeln(f"var {variable.name}: {variable.type}")
         writer.writeln("}")
         writer.newline()
-        return import_list
-    elif len(message.extends) > 1:
-        shared_interface = _get_shared_interface(message)
-
-        if message.interfaces and len(message.interfaces) > 1:
-            assert False, f"This is not yet supported, multiple inheritance + multiple interfaces, not sure what code to generate"
-    
-        if message.interfaces and len(message.interfaces) == 1 and message.interfaces[0].root.name == message.name:
-            # add import
-            pass
-        else:
-            if message.interfaces:
-                writer.writeln(f"interface {message.name}Entity : {message.interfaces[0].root.name}, Entity {{")
-            else:
-                writer.writeln(f"interface {message.name}Entity : Entity {{")
-            indented_writer = writer.indented()
-            for enum in shared_interface.enums:
-                indented_writer.writeln(f"enum class {enum[0]} {{")
-                indented_writer.indented().writeln(f'{", ".join(enum[1])}')
-                indented_writer.writeln(f"}}")
-                writer.newline()
-            for variable in shared_interface.variables:
-                indented_writer.writeln(f"var {variable.name}: {variable.type}")
-            writer.writeln("}")
-            writer.newline()
 
 
         for extends in message.extends:
@@ -318,11 +277,6 @@ def _write_datamodel_class(writer: IndentedWriter,
 
     if len(message.extends) == 1:
         super_variables = _get_variables(message.extends[0].root, message.extends[0].root.name + ".", True)[0]
-    for super_interface in message.interfaces:
-        super_interface_variables = _get_variables(super_interface.root, prefix)
-
-        super_interface_nonnull_variables += super_interface_variables[0]
-        super_interface_nullable_variables += super_interface_variables[1]
     if shared_interface:
         for parent in shared_interface.parents:
             shared_interface_super_nonnull_variables += _get_variables(parent.root, prefix)[0]
@@ -438,9 +392,6 @@ def _write_datamodel_class(writer: IndentedWriter,
                     writer.appendln('')
             writer.write(")")
         writer.append(", Serializable, Entity")
-    if not shared_interface:
-        for message_interface in message.interfaces:
-            writer.append(f", {message_interface.name}")
 
     hasId = False
     if not shared_interface:
@@ -599,37 +550,13 @@ def _write_logic(writer: IndentedWriter, entity: Entity, package: str) -> None:
     _write_logic_inner(writer, entity.root)
 
 def _write_logic_inner(writer: IndentedWriter, message: Message) -> None:
-    if message.is_interface:
-        writer.writeln(f"interface {message.name} : {message.name}Entity {{")
-        indented_writer = writer.indented()
-        if message.messages:
-            for submessage in message.messages:
-                name = submessage.name
-                if submessage.is_array:
-                    if len(submessage.extends) != 1 or submessage.properties or submessage.messages:
-                        _write_logic_inner(indented_writer, submessage)
-                else:
-                    if len(submessage.extends) != 1 or submessage.properties or submessage.messages:
-                        _write_logic_inner(indented_writer, submessage)
-    elif len(message.extends) > 1:
+    if len(message.extends) > 1:
         shared_interface = _get_shared_interface(message)
 
-        if message.interfaces and len(message.interfaces) > 1:
-            assert False, f"This is not yet supported, multiple inheritance + multiple interfaces, not sure what code to generate"
-    
-        if message.interfaces and len(message.interfaces) == 1 and message.interfaces[0].root.name == message.name:
-            # add import
-            pass
-        else:
-            #if message.interfaces:
-            writer.writeln(f"interface {message.name} : {message.name}Entity {{")
-            #else:
-            #    writer.writeln(f"interface {message.name} {{")
-            indented_writer = writer.indented()
-            # for variable in shared_interface.variables:
-            #     indented_writer.writeln(f"var {variable.name}: {variable.type}")
-            writer.writeln("}")
-            writer.newline()
+        writer.writeln(f"interface {message.name} : {message.name}Entity {{")
+        indented_writer = writer.indented()
+        writer.writeln("}")
+        writer.newline()
         
         
 
@@ -720,13 +647,13 @@ def _write_logic_class(writer: IndentedWriter, message: Message, shared_interfac
             name = submessage.name
 
             if submessage.is_array:
-                if len(submessage.extends) != 1 or submessage.properties or submessage.messages or submessage.interfaces:
+                if len(submessage.extends) != 1 or submessage.properties or submessage.messages:
                     if not hasSubClass:
                         writer.appendln(" {")
                         hasSubClass = True
                     _write_logic_inner(indented_writer, submessage)
             else:
-                if len(submessage.extends) != 1 or submessage.properties or submessage.messages or submessage.interfaces:
+                if len(submessage.extends) != 1 or submessage.properties or submessage.messages:
                     if not hasSubClass:
                         writer.appendln(" {")
                         hasSubClass = True
@@ -846,7 +773,7 @@ def _get_shared_interface(message: Message) -> SharedInterface:
         if nullable:
             variable_type += "?"
         variables.append(Variable(name, variable_name, variable_type, False, nullable))
-    return SharedInterface(message.name, variables, message.interfaces, enums)
+    return SharedInterface(message.name, variables, [], enums)
 
 def _get_variables(message: Message, prefix: str, recursive: bool = False):
     nonnull_variables = []
@@ -870,10 +797,7 @@ def _get_variables(message: Message, prefix: str, recursive: bool = False):
             for enum_value in property.enum:
                 enum_options.append(enum_value)
             enums.append((name, enum_options))
-            if message.is_interface:
-                variable_type = f"{message.name}Entity.{name}"
-            else:
-                variable_type = name
+            variable_type = name
         if nullable:
             variable_type += "?"
             nullable_variables.append(Variable(name, variable_name, variable_type, variable_type_primitive, nullable))
@@ -885,23 +809,19 @@ def _get_variables(message: Message, prefix: str, recursive: bool = False):
         nullable = submessage.nullable
         variable_type_primitive = False
         if submessage.is_array:
-            if not submessage.extends or (submessage.interfaces and submessage.name != submessage.interfaces[0].name) or (len(submessage.extends) == 1 and (submessage.properties or submessage.messages)):
+            if not submessage.extends or (len(submessage.extends) == 1 and (submessage.properties or submessage.messages)):
                 # inner class
                 inner_classes.append((submessage, prefix))
                 variable_type = "MutableList<" + prefix + name + ">"
             elif len(submessage.extends) == 1:
                 # external class
                 variable_type = "MutableList<" + submessage.extends[0].name + ">"
-            elif len(submessage.interfaces) == 1 and submessage.interfaces[0].name == submessage.name:
-                # external interface
-                inner_classes.append((submessage, prefix))
-                variable_type = "MutableList<" + submessage.name + ">"
             else:
                 inner_classes.append((submessage, prefix))
                 variable_type = "MutableList<" + prefix + submessage.name + ">"
             variable_name = camelcase(name) + "List"
         else:
-            if not submessage.extends or (submessage.interfaces and submessage.name != submessage.interfaces[0].name) or (len(submessage.extends) == 1 and (submessage.properties or submessage.messages)):
+            if not submessage.extends or (len(submessage.extends) == 1 and (submessage.properties or submessage.messages)):
                 inner_classes.append((submessage, prefix))
                 variable_type = prefix + name
             elif len(submessage.extends) == 1:
@@ -924,17 +844,6 @@ def _get_variables(message: Message, prefix: str, recursive: bool = False):
             nullable_variables += result[1] + nullable_variables
             enums += result[2]
             inner_classes += result[3]
-        for interface in message.interfaces:
-            result = _get_variables(interface.root, prefix, recursive)
-            for variable in result[0]:
-                if variable not in nonnull_variables:
-                    nonnull_variables.insert(0, variable)
-            for variable in result[1]:
-                if variable not in nullable_variables:
-                    nullable_variables.insert(0, variable)
-            enums += result[2]
-            inner_classes += result[3]
-
 
     return nonnull_variables, nullable_variables, enums, inner_classes
 
@@ -971,11 +880,6 @@ def _get_variable_dependencies(entity: Entity, root: Message, logic: bool = Fals
     for message in root.messages:
         if message.nullable and logic:
             continue
-        
-        if message.interfaces:
-            for interface in message.interfaces:
-                dependencies.append(interface)
-                dependencies += _get_variable_dependencies(interface, interface.root, logic)
         
         if message.extends:
             for extends in message.extends:
@@ -1014,10 +918,6 @@ def _get_dependencies(entity: Entity, logic: bool = False):
         for extends in entity.root.extends:
             dependencies.append(extends)
             dependencies += _get_constructor_dependencies(extends)
-
-    for interface in entity.root.interfaces:
-        dependencies.append(interface)
-        dependencies += _get_variable_dependencies(interface, interface.root, logic)
 
     dependencies += _get_variable_dependencies(entity, entity.root, logic)
 

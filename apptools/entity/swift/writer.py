@@ -91,7 +91,6 @@ def _write_datamodel(writer: IndentedWriter, entity: Entity) -> None:
     writer.newline()
     postfix = _write_datamodel_inner(writer, entity.root)
     writer.newline()
-    writer.writeln("// see: https://developer.apple.com/forums/thread/15195")
     writer.writeln(postfix)
 
 def _write_datamodel_inner(writer: IndentedWriter,

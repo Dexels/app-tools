@@ -1241,19 +1241,6 @@ def _get_dependencies(entity: Entity, logic: bool = False):
     return dependencies
 
 
-def _package(path: pathlib.Path, start: str = None) -> str:
-    parts: List[str] = []
-    match = False
-    for part in path.parts:
-        if part == start or start is None:
-            match = True
-
-        if match:
-            parts.append(part)
-
-    return ".".join(parts)
-
-
 def _to_case(s: str) -> str:
     if s.isupper():
         s = s.lower()

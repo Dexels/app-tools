@@ -33,9 +33,6 @@ class Message(object):
         self.extends = extends
         self.is_non_empty = len(properties) + len(messages)
 
-    def __eq__(self, other):
-        return True
-
 
 class Entity(object):
     def __init__(self, name: str, path: pathlib.Path, package: pathlib.Path,

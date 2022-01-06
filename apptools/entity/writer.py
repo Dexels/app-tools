@@ -14,16 +14,16 @@ Writer = Callable[[List[Entity], Options], int]
 def write(writer: Writer, options: Options) -> int:
     input: pathlib.Path = options["input"]
 
+    # Find all entity files at the given input recursively.
     paths = _api(input)
-    mappings = _parse(input, paths)
-    entities = _entities(input, mappings)
+    entities = _entities(input, paths)
 
     return writer(entities, options)
 
 
-def _api(path: pathlib.Path) -> set[pathlib.Path]:
+def _api(input: pathlib.Path) -> set[pathlib.Path]:
     paths: set[pathlib.Path] = set()
-    for path in path.rglob("*.xml"):
+    for path in input.rglob("*.xml"):
         # In the future this statement can possibly be removed since we might
         # want everything to be exposed that is defined.
         if path.stem == "entitymapping":
@@ -32,34 +32,22 @@ def _api(path: pathlib.Path) -> set[pathlib.Path]:
     return paths
 
 
-def _parse(input: pathlib.Path, paths: Set[pathlib.Path]) -> Mapping[pathlib.Path, Element]:
-    mapping: MutableMapping[pathlib.Path, Element] = {}
-
-    for path in paths:
-        print(f"Fetch path {path}")
-        mapping[path] = ElementTree.parse(path).getroot()
-
-    return mapping
+def _entities(input: pathlib.Path, paths: set[pathlib.Path]) -> List[Entity]:
+    return [_entity(input, path) for path in paths]
 
 
-def _entities(input: pathlib.Path, mappings: Mapping[pathlib.Path,
-                                                     Element]) -> List[Entity]:
-    return [
-        _entity(input, path, element, mappings)
-        for path, element in mappings.items()
-    ]
-
-
-def _entity(input: pathlib.Path, path: pathlib.Path, element: Element,
-            mappings: Mapping[pathlib.Path, Element]) -> Entity:
+def _entity(input: pathlib.Path, path: pathlib.Path) -> Entity:
+    element = ElementTree.parse(path).getroot()
     name = path.stem
     version = _version(name, element)
     root = _root(name, version, element)
     methods = _methods(element)
-    message = _message(input, path, root, mappings)
+    message = _message(input, path, root)
     package = _package(input, path, name)
 
-    return Entity(name, path, package, version, methods, message)
+    entity_path = pathlib.Path(*path.parts[input.parts.index("entities") + 1:])
+
+    return Entity(name, "entity" / entity_path.with_suffix(''), package, version, methods, message)
 
 
 def _version(name: str, element: Element) -> int:
@@ -99,8 +87,7 @@ def _package(input: pathlib.Path, path: pathlib.Path,
     return pathlib.Path(str(path).removeprefix(str(input) + "/")).parent
 
 
-def _message(input: pathlib.Path, path: pathlib.Path, element: Element,
-             mappings: Mapping[pathlib.Path, Element]) -> Message:
+def _message(input: pathlib.Path, path: pathlib.Path, element: Element) -> Message:
     name = element.get("name").split(".")[0]
     is_array = element.get("type") == "array"
     nullable = _is_message_nullable(element.get("subtype"))
@@ -120,7 +107,7 @@ def _message(input: pathlib.Path, path: pathlib.Path, element: Element,
         extends_raw = element.get("extends")
 
     properties = [_property(property) for property in properties_raw]
-    messages = [_message(input, path, message, mappings) for message in messages_raw]
+    messages = [_message(input, path, message) for message in messages_raw]
 
     parents: List[Entity] = []
     if extends_raw is not None:
@@ -128,7 +115,7 @@ def _message(input: pathlib.Path, path: pathlib.Path, element: Element,
             extends = _extends(extends_item)
             extension = pathlib.Path(*extends.path.parts)
             dir = pathlib.Path(*input.parts[:input.parts.index("entities")])
-            parent = _entity(input, extension, mappings[dir / "entities" / (str(extension) + ".xml")], mappings)
+            parent = _entity(input, dir / "entities" / (str(extension) + ".xml"))
             parents.append(parent)
 
             assert extends.name.version == parent.version, f"Version error: Entity at {path} includes an extension of {parent.name} with version {extends.name.version}, but should be {parent.version}"

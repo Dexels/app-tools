@@ -111,7 +111,7 @@ def _message(input: pathlib.Path, path: pathlib.Path, element: Element) -> Messa
 
     parents: List[Entity] = []
     if extends_raw is not None:
-        for extends_item in extends_raw.split(","):
+        for extends_item in extends_raw.split("^"):
             extends = _extends(extends_item)
             extension = pathlib.Path(*extends.path.parts)
             dir = pathlib.Path(*input.parts[:input.parts.index("entities")])

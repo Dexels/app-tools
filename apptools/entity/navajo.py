@@ -55,7 +55,7 @@ class Entity(object):
         for property in self.root.properties:
             if property.is_key and key_id in property.key_ids:
                 result.append(property)
-        if len(self.root.extends) == 1 and not self.root.extends[0].query:
+        if len(self.root.extends) == 1:
             result += self.root.extends[0].key_properties(key_id)
         return result
 

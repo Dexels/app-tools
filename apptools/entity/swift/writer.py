@@ -336,94 +336,94 @@ def _write_datamodel_class(writer: IndentedWriter,
         _write_coding(writer.indented(), message, prefix, shared_interface)
 
 
-    # write Entity functions
-    logic_type = f"{prefix}{shared_interface.name}{message.name}" if shared_interface else f"{prefix[:-1]}"
-    indented_writer.writeln(f"private var original: {logic_type}? = nil")
-    indented_writer.newline()
-    if message.extends or shared_interface:
-        indented_writer.write("override ")
-    else:
-        indented_writer.write("")
-    indented_writer.appendln("func saveOriginal() {")
-    indented_writer.indented().writeln(f"original = (copy() as? {logic_type})")
-    indented_writer.writeln("}")
-    indented_writer.newline()
-    if message.extends or shared_interface:
-        indented_writer.write("override ")
-    else:
-        indented_writer.write("")
-    indented_writer.appendln(f"func copy() -> Entity {{")
-    indented_writer.indented().write(f"let copy = {logic_type}(")
-    items = []
-    for variable in constructor_vars:
-        items.append(f"{variable.name}: {variable.name}{f'.map {{ $0.copy() as! {variable.type[1:-1]} }}' if variable.name.endswith('List') else ''}{'' if variable.primitive or variable.name.endswith('List') else ('.copy() as! ' + variable.type)}")
-    indented_writer.append(", ".join(items))
-    indented_writer.appendln(")")
-    indented_writer.indented().writeln(f"copy.copyNullableVariables(from: self as! {logic_type})")
-    indented_writer.indented().writeln(f"return copy")
-    indented_writer.writeln("}")
-    indented_writer.newline()
-    indented_writer.writeln(f"func copyNullableVariables(from: {logic_type}) {{")
-    if message.extends or shared_interface:
-        indented_writer.indented().writeln(f"super.copyNullableVariables(from: from)")
-    for variable in member_vars:
-        if variable.primitive:
-            indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}")
-        else:
-            if variable.name.endswith("List"):
-                if variable.nullable:
-                    indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}?.map {{ $0.copy() }}")
-                else:
-                    indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}.map {{ $0.copy() }}")
-            else:
-                indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}{'?' if variable.nullable else ''}.copy()")
-    indented_writer.writeln("}")
-    indented_writer.newline()
+    ## write Entity functions
+    #logic_type = f"{prefix}{shared_interface.name}{message.name}" if shared_interface else f"{prefix[:-1]}"
+    #indented_writer.writeln(f"private var original: {logic_type}? = nil")
+    #indented_writer.newline()
+    #if message.extends or shared_interface:
+    #    indented_writer.write("override ")
+    #else:
+    #    indented_writer.write("")
+    #indented_writer.appendln("func saveOriginal() {")
+    #indented_writer.indented().writeln(f"original = (copy() as? {logic_type})")
+    #indented_writer.writeln("}")
+    #indented_writer.newline()
+    #if message.extends or shared_interface:
+    #    indented_writer.write("override ")
+    #else:
+    #    indented_writer.write("")
+    #indented_writer.appendln(f"func copy() -> Entity {{")
+    #indented_writer.indented().write(f"let copy = {logic_type}(")
+    #items = []
+    #for variable in constructor_vars:
+    #    items.append(f"{variable.name}: {variable.name}{f'.map {{ $0.copy() as! {variable.type[1:-1]} }}' if variable.name.endswith('List') else ''}{'' if variable.primitive or variable.name.endswith('List') else ('.copy() as! ' + variable.type)}")
+    #indented_writer.append(", ".join(items))
+    #indented_writer.appendln(")")
+    #indented_writer.indented().writeln(f"copy.copyNullableVariables(from: self as! {logic_type})")
+    #indented_writer.indented().writeln(f"return copy")
+    #indented_writer.writeln("}")
+    #indented_writer.newline()
+    #indented_writer.writeln(f"func copyNullableVariables(from: {logic_type}) {{")
+    #if message.extends or shared_interface:
+    #    indented_writer.indented().writeln(f"super.copyNullableVariables(from: from)")
+    #for variable in member_vars:
+    #    if variable.primitive:
+    #        indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}")
+    #    else:
+    #        if variable.name.endswith("List"):
+    #            if variable.nullable:
+    #                indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}?.map {{ $0.copy() }}")
+    #            else:
+    #                indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}.map {{ $0.copy() }}")
+    #        else:
+    #            indented_writer.indented().writeln(f"{variable.name} = from.{variable.name}{'?' if variable.nullable else ''}.copy()")
+    #indented_writer.writeln("}")
+    #indented_writer.newline()
     
-    if message.extends or shared_interface:
-        indented_writer.write("override ")
-    else:
-        indented_writer.write("")
-    indented_writer.appendln(f"func deepEquals(other: Entity?) -> Bool {{")
+    #if message.extends or shared_interface:
+    #    indented_writer.write("override ")
+    #else:
+    #    indented_writer.write("")
+    #indented_writer.appendln(f"func deepEquals(other: Entity?) -> Bool {{")
 
-    if message.extends:
-        indented_writer.indented().writeln(f"if (!super.deepEquals(other: other)) {{")
-        indented_writer.indented().indented().writeln("return false")
-        indented_writer.indented().writeln("}")
-    # 
-    indented_writer.indented().writeln(f"if let other = (other as? {logic_type}) {{")
-    indented_writer.indented().indented().writeln(f"return true")
-    for variable in (constructor_vars + member_vars):
-        if variable.primitive:
-            indented_writer.indented().indented().indented().writeln(f"&& {variable.name} == other.{variable.name}")
-        else:
-            if variable.name.endswith("List"):
-                indented_writer.indented().indented().indented().writeln(f"&& {f'if ({variable.name} == null || other.{variable.name} == null) {variable.name} == other.{variable.name} else' if variable.nullable else ''} self.{variable.name}.count == other.{variable.name}.count && zip({variable.name}, other.{variable.name}).allSatisfy {{ $0.0.deepEquals(other: $0.1) }}")
-            else:
-                indented_writer.indented().indented().indented().writeln(f"&& {f'if ({variable.name} == null) other.{variable.name} == null else {variable.name}?' if variable.nullable else variable.name}.deepEquals(other: other.{variable.name}){' == true' if variable.nullable else ''}")
-    indented_writer.indented().writeln("} else {")
-    indented_writer.indented().indented().writeln("return false")
-    indented_writer.indented().writeln("}")
-    indented_writer.writeln("}")
-    indented_writer.newline()
-    if message.extends or shared_interface:
-        indented_writer.write("override ")
-    else:
-        indented_writer.write("")
-    indented_writer.appendln(f"func hasChanged() -> Bool {{")
-    indented_writer.indented().writeln(f"return !deepEquals(other: original)")
-    indented_writer.writeln("}")
+    #if message.extends:
+    #    indented_writer.indented().writeln(f"if (!super.deepEquals(other: other)) {{")
+    #    indented_writer.indented().indented().writeln("return false")
+    #    indented_writer.indented().writeln("}")
+    ## 
+    #indented_writer.indented().writeln(f"if let other = (other as? {logic_type}) {{")
+    #indented_writer.indented().indented().writeln(f"return true")
+    #for variable in (constructor_vars + member_vars):
+    #    if variable.primitive:
+    #        indented_writer.indented().indented().indented().writeln(f"&& {variable.name} == other.{variable.name}")
+    #    else:
+    #        if variable.name.endswith("List"):
+    #            indented_writer.indented().indented().indented().writeln(f"&& {f'if ({variable.name} == null || other.{variable.name} == null) {variable.name} == other.{variable.name} else' if variable.nullable else ''} self.{variable.name}.count == other.{variable.name}.count && zip({variable.name}, other.{variable.name}).allSatisfy {{ $0.0.deepEquals(other: $0.1) }}")
+    #        else:
+    #            indented_writer.indented().indented().indented().writeln(f"&& {f'if ({variable.name} == null) other.{variable.name} == null else {variable.name}?' if variable.nullable else variable.name}.deepEquals(other: other.{variable.name}){' == true' if variable.nullable else ''}")
+    #indented_writer.indented().writeln("} else {")
+    #indented_writer.indented().indented().writeln("return false")
+    #indented_writer.indented().writeln("}")
+    #indented_writer.writeln("}")
+    #indented_writer.newline()
+    #if message.extends or shared_interface:
+    #    indented_writer.write("override ")
+    #else:
+    #    indented_writer.write("")
+    #indented_writer.appendln(f"func hasChanged() -> Bool {{")
+    #indented_writer.indented().writeln(f"return !deepEquals(other: original)")
+    #indented_writer.writeln("}")
 
-    indented_writer.newline()
-    if message.extends or shared_interface:
-        indented_writer.write("override ")
-    else:
-        indented_writer.write("")
-    indented_writer.appendln(f"func toOriginal() -> Entity {{")
-    indented_writer.indented().writeln(f"let result = original")
-    indented_writer.indented().writeln(f"original?.saveOriginal()")
-    indented_writer.indented().writeln(f"return result!")
-    indented_writer.writeln("}")
+    #indented_writer.newline()
+    #if message.extends or shared_interface:
+    #    indented_writer.write("override ")
+    #else:
+    #    indented_writer.write("")
+    #indented_writer.appendln(f"func toOriginal() -> Entity {{")
+    #indented_writer.indented().writeln(f"let result = original")
+    #indented_writer.indented().writeln(f"original?.saveOriginal()")
+    #indented_writer.indented().writeln(f"return result!")
+    #indented_writer.writeln("}")
 
     writer.writeln("}")
     writer.newline()

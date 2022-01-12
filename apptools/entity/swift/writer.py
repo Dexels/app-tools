@@ -100,7 +100,7 @@ def _write_datamodel_inner(writer: IndentedWriter,
     if len(message.extends) > 1:
         shared_interface = _get_shared_interface(message, prefix)
     
-        postfix += f'protocol {prefix.replace(".", "")}{message.name}Entity: Entity {{\n'
+        postfix += f'protocol {prefix.replace(".", "")}{message.name}Entity {{\n'
         indented_writer = writer.indented()
         for enum in shared_interface.enums:
             with IndentedWriter(path=None) as enum_writer:
@@ -162,7 +162,7 @@ def _write_datamodel_class(writer: IndentedWriter,
             if not already_implements(message, shared_interface):
                 writer.append(f", {shared_interface.name}")
     elif not message.extends:
-        writer.append(f": Entity, Codable")
+        writer.append(f": Codable")
     else:
         writer.append(f": {message.extends[0].name}")
     

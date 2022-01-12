@@ -694,7 +694,7 @@ def _write_coding(writer: IndentedWriter,
 def _write_enum(writer: IndentedWriter, name: str,
                 cases: List[str]) -> None:
     writer.writeln(
-        f"enum {'`Type`' if name == 'Type' else name}: String, Codable, CaseIterable, Comparable {{")
+        f"enum {'`Type`' if name == 'Type' else name}: String, Codable, CaseIterable, CaseOrderComparable {{")
     for case in cases:
         case_name = _to_case(case)
         value = case
@@ -704,20 +704,6 @@ def _write_enum(writer: IndentedWriter, name: str,
         else:
             writer.indented().writeln(f'case {_to_case(case)}')
 
-    writer.newline()
-    _write_enum_comparable(writer.indented(), name)
-    writer.writeln("}")
-
-
-def _write_enum_comparable(writer: IndentedWriter, name: str) -> None:
-    writer.writeln(
-        f"static func < (lhs: {name}, rhs: {name}) -> Bool {{"
-    )
-    indented_writer = writer.indented()
-    indented_writer.writeln("let index = allCases.firstIndex(of: lhs)")
-    indented_writer.writeln("let other = allCases.firstIndex(of: rhs)")
-    indented_writer.newline()
-    indented_writer.writeln("return index! < other!")
     writer.writeln("}")
 
 
@@ -817,16 +803,18 @@ def _write_service(writer: IndentedWriter, entity: Entity) -> None:
     writer.writeln(f"import Alamofire")
     writer.writeln(f"import SendratoAppSDK")
     writer.newline()
-    writer.writeln(f"enum {entity.name}Service {{")
+    writer.writeln(f"private enum {entity.name}Service {{")
 
-    indented_writer = writer.indented()
+    indented_writer = writer.indented(indent=2)
 
     indented_writer.writeln(f'static let path = "/{entity.path}"')
-
-    indented_writer.writeln("static let headers = [")
-    indented_writer.indented().writeln(
-        f'"X-Navajo-Version": "{max(entity.version, 0)}"')
-    indented_writer.writeln("]")
+    indented_writer.writeln(f'static let version = {max(entity.version, 0)}')
+    indented_writer.writeln(f"static let headers = HTTPHeaders([")
+    indented_writer.indented(indent=2).writeln(
+        '"X-Navajo-Entity-Version": String(version)'
+    )
+    indented_writer.writeln("])")
+    writer.writeln("}")
 
     writer.newline()
 
@@ -849,19 +837,19 @@ def _write_service(writer: IndentedWriter, entity: Entity) -> None:
                 parameters.append(f"{name}: {type}{optional}")
 
             if method == "GET":
-                _write_service_get(indented_writer, entity, parameters,
+                _write_service_get(writer, entity, parameters,
                                    properties, required_properties,
                                    optional_properties)
             if method == "PUT":
-                _write_service_put(indented_writer, entity, parameters,
+                _write_service_put(writer, entity, parameters,
                                    properties, required_properties,
                                    optional_properties)
             if method == "POST":
-                _write_service_post(indented_writer, entity, parameters,
+                _write_service_post(writer, entity, parameters,
                                     properties, required_properties,
                                     optional_properties)
             if method == "DELETE":
-                _write_service_delete(indented_writer, entity, parameters,
+                _write_service_delete(writer, entity, parameters,
                                       properties, required_properties,
                                       optional_properties)
 
@@ -870,18 +858,18 @@ def _write_service(writer: IndentedWriter, entity: Entity) -> None:
 
         if not entity.key_ids:
             if method == "GET":
-                _write_service_get(indented_writer, entity)
+                _write_service_get(writer, entity)
             if method == "PUT":
-                _write_service_put(indented_writer, entity)
+                _write_service_put(writer, entity)
             if method == "POST":
-                _write_service_post(indented_writer, entity)
+                _write_service_post(writer, entity)
             if method == "DELETE":
-                _write_service_delete(indented_writer, entity)
+                _write_service_delete(writer, entity)
 
         if i != len(entity.methods) - 1:
             writer.newline()
 
-    writer.writeln("}")
+    # writer.writeln("}")
 
 
 def _write_service_get(writer: IndentedWriter,
@@ -891,34 +879,27 @@ def _write_service_get(writer: IndentedWriter,
                        required_properties: List[Property] = [],
                        optional_properties: List[Property] = []) -> None:
     writer.writeln(
-        f"static func {camelcase(entity.name)}({', '.join(parameters)}) -> JSONOperation<{entity.name}> {{"
+        f"extension Service where ResponseSerializer == DecodableResponseSerializer<{entity.name}> {{"
     )
 
-    indented_writer = writer.indented()
+    indented_writer = writer.indented(indent=2)
+    indented_writer.writeln(f"static func {camelcase(entity.name)}({', '.join(parameters)}) -> Self {{")
 
-    indented_writer.writeln("var parameters: [String: Any] = [:]")
-    indented_writer.writeln(f'parameters["v"] = {max(entity.version, 0)}')
-    for property in required_properties + optional_properties:
-        indented_writer.writeln(
-            f'parameters["{property.name}"] = {_variable_name(property.name)}')
+    method_writer = indented_writer.indented(indent=2)
+    method_writer.writeln(".init(")
+    method_writer.indented(indent=2).writeln(f"path: {entity.name}Service.path,")
+    method_writer.indented(indent=2).writeln(f"headers: {entity.name}Service.headers,")
+    if parameters:
+        method_writer.indented(indent=2).writeln(f"requestModifier: .parameters([")
+        for property in required_properties + optional_properties:
+            method_writer.indented(indent=4).writeln(f'"{property.name}": {_variable_name(property.name)},')
+        method_writer.indented(indent=2).writeln(f"]),")
+    method_writer.indented(indent=2).writeln(f"responseSerializer: .decodable(of: {entity.name}.self)")
+    method_writer.writeln(")")
 
-    indented_writer.newline()
+    indented_writer.writeln(f"}}")
 
-    indented_writer.writeln(
-        "let encoding = URLEncoding(destination: .queryString, boolEncoding: .literal)"
-    )
-    indented_writer.writeln(
-        "let input = ParameterInputEncoding(encoding: encoding, parameters: parameters)"
-    )
-
-    indented_writer.newline()
-
-    indented_writer.writeln(
-        f"return JSONOperation(path: path, headers: headers, input: input)"
-    )
-
-    writer.writeln("}")
-
+    writer.writeln(f"}}")
 
 def _write_service_put(writer: IndentedWriter,
                        entity: Entity,
@@ -926,42 +907,40 @@ def _write_service_put(writer: IndentedWriter,
                        properties: List[Property] = [],
                        required_properties: List[Property] = [],
                        optional_properties: List[Property] = []) -> None:
+    writer.writeln(
+        f"extension Service where ResponseSerializer == DecodableResponseSerializer<{entity.name}> {{"
+    )
+
+    indented_writer = writer.indented(indent=2)
     if parameters:
-        writer.writeln(
-            f"static func update({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> JSONOperation<{entity.name}> {{"
+        indented_writer.writeln(
+            f"static func update({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> Self {{"
         )
     else:
-        writer.writeln(
-            f"static func update(_ {_variable_name(entity.name)}: {entity.name}) -> JSONOperation<{entity.name}> {{"
+        indented_writer.writeln(
+            f"static func update(_ {_variable_name(entity.name)}: {entity.name}) -> Self {{"
         )
 
-    indented_writer = writer.indented()
+    method_writer = indented_writer.indented(indent=2)
+    method_writer.writeln(".init(")
+    method_writer.indented(indent=2).writeln(f"path: {entity.name}Service.path,")
+    method_writer.indented(indent=2).writeln(f"method: .put,")
+    method_writer.indented(indent=2).writeln(f"headers: {entity.name}Service.headers,")
+    if parameters:
+        method_writer.indented(indent=2).writeln(f"requestModifier: .multi(")
+        method_writer.indented(indent=4).writeln(f".parameters([")
+        for property in required_properties + optional_properties:
+            method_writer.indented(indent=6).writeln(f'"{property.name}": {_variable_name(property.name)},')
+        method_writer.indented(indent=4).writeln(f"]),")
+        method_writer.indented(indent=4).writeln(f".encode({_variable_name(entity.name)})")
+        method_writer.indented(indent=2).writeln(f"),")
+    else:
+        method_writer.indented(indent=2).writeln(f"requestModifier: .encode({_variable_name(entity.name)}),")
+    method_writer.indented(indent=2).writeln(f"responseSerializer: .decodable(of: {entity.name}.self)")
+    method_writer.writeln(")")
+    indented_writer.writeln("}")
 
-    indented_writer.writeln("var parameters: [String: Any] = [:]")
-    indented_writer.writeln(f'parameters["v"] = {max(entity.version, 0)}')
-    for property in required_properties + optional_properties:
-        indented_writer.writeln(
-            f'parameters["{property.name}"] = {_variable_name(property.name)}')
-
-    indented_writer.newline()
-
-    indented_writer.writeln(
-        "let encoding = URLEncoding(destination: .queryString, boolEncoding: .literal)"
-    )
-    indented_writer.writeln(
-        "let parameterInputEncoding = ParameterInputEncoding(encoding: encoding, parameters: parameters)"
-    )
-    indented_writer.writeln(
-        f'let input = EncodableEncoding({_variable_name(entity.name)}, parameterInputEncoding: parameterInputEncoding)'
-    )
-
-    indented_writer.newline()
-
-    indented_writer.writeln(
-        f'return JSONOperation(path: path, method: .put, headers: headers, input: input)'
-    )
-
-    writer.writeln("}")
+    writer.writeln(f"}}")
 
 
 def _write_service_post(writer: IndentedWriter,
@@ -970,42 +949,40 @@ def _write_service_post(writer: IndentedWriter,
                         properties: List[Property] = [],
                         required_properties: List[Property] = [],
                         optional_properties: List[Property] = []) -> None:
+    writer.writeln(
+        f"extension Service where ResponseSerializer == DecodableResponseSerializer<{entity.name}> {{"
+    )
+
+    indented_writer = writer.indented(indent=2)
     if parameters:
-        writer.writeln(
-            f"static func insert({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> JSONOperation<{entity.name}> {{"
+        indented_writer.writeln(
+            f"static func insert({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> Self {{"
         )
     else:
-        writer.writeln(
-            f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> JSONOperation<{entity.name}> {{"
+        indented_writer.writeln(
+            f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> Self {{"
         )
 
-    indented_writer = writer.indented()
+    method_writer = indented_writer.indented(indent=2)
+    method_writer.writeln(".init(")
+    method_writer.indented(indent=2).writeln(f"path: {entity.name}Service.path,")
+    method_writer.indented(indent=2).writeln(f"method: .post,")
+    method_writer.indented(indent=2).writeln(f"headers: {entity.name}Service.headers,")
+    if parameters:
+        method_writer.indented(indent=2).writeln(f"requestModifier: .multi(")
+        method_writer.indented(indent=4).writeln(f".parameters([")
+        for property in required_properties + optional_properties:
+            method_writer.indented(indent=6).writeln(f'"{property.name}": {_variable_name(property.name)},')
+        method_writer.indented(indent=4).writeln(f"]),")
+        method_writer.indented(indent=4).writeln(f".encode({_variable_name(entity.name)})")
+        method_writer.indented(indent=2).writeln(f"),")
+    else:
+        method_writer.indented(indent=2).writeln(f"requestModifier: .encode({_variable_name(entity.name)}),")
+    method_writer.indented(indent=2).writeln(f"responseSerializer: .decodable(of: {entity.name}.self)")
+    method_writer.writeln(")")
+    indented_writer.writeln("}")
 
-    indented_writer.writeln("var parameters: [String: Any] = [:]")
-    indented_writer.writeln(f'parameters["v"] = {max(entity.version, 0)}')
-    for property in required_properties + optional_properties:
-        indented_writer.writeln(
-            f'parameters["{property.name}"] = {_variable_name(property.name)}')
-
-    indented_writer.newline()
-
-    indented_writer.writeln(
-        "let encoding = URLEncoding(destination: .queryString, boolEncoding: .literal)"
-    )
-    indented_writer.writeln(
-        "let parameterInputEncoding = ParameterInputEncoding(encoding: encoding, parameters: parameters)"
-    )
-    indented_writer.writeln(
-        f'let input = EncodableEncoding({_variable_name(entity.name)}, parameterInputEncoding: parameterInputEncoding)'
-    )
-
-    indented_writer.newline()
-
-    indented_writer.writeln(
-        f'return JSONOperation(path: path, method: .post, headers: headers, input: input)'
-    )
-
-    writer.writeln("}")
+    writer.writeln(f"}}")
 
 
 def _write_service_delete(writer: IndentedWriter,
@@ -1015,32 +992,28 @@ def _write_service_delete(writer: IndentedWriter,
                           required_properties: List[Property] = [],
                           optional_properties: List[Property] = []) -> None:
     writer.writeln(
-        f"static func remove({', '.join(parameters)}) -> JSONOperation<{entity.name}> {{")
+        f"extension Service where ResponseSerializer == DecodableResponseSerializer<{entity.name}> {{"
+    )
 
-    indented_writer = writer.indented()
+    indented_writer = writer.indented(indent=2)
+    indented_writer.writeln(
+        f"static func delete({', '.join(parameters)}) -> Self {{"
+    )
 
-    indented_writer.writeln("var parameters: [String: Any] = [:]")
-    indented_writer.writeln(f'parameters["v"] = {max(entity.version, 0)}')
+    method_writer = indented_writer.indented(indent=2)
+    method_writer.writeln(".init(")
+    method_writer.indented(indent=2).writeln(f"path: {entity.name}Service.path,")
+    method_writer.indented(indent=2).writeln(f"method: .delete,")
+    method_writer.indented(indent=2).writeln(f"headers: {entity.name}Service.headers,")
+    method_writer.indented(indent=2).writeln(f"requestModifier: .parameters([")
     for property in required_properties + optional_properties:
-        indented_writer.writeln(
-            f'parameters["{property.name}"] = {_variable_name(property.name)}')
+        method_writer.indented(indent=4).writeln(f'"{property.name}": {_variable_name(property.name)},')
+    method_writer.indented(indent=2).writeln(f"]),")
+    method_writer.indented(indent=2).writeln(f"responseSerializer: .decodable(of: {entity.name}.self)")
+    method_writer.writeln(")")
+    indented_writer.writeln("}")
 
-    indented_writer.newline()
-
-    indented_writer.writeln(
-        "let encoding = URLEncoding(destination: .queryString, boolEncoding: .literal)"
-    )
-    indented_writer.writeln(
-        "let input = ParameterInputEncoding(encoding: encoding, parameters: parameters)"
-    )
-
-    indented_writer.newline()
-
-    indented_writer.writeln(
-        f"return JSONOperation(path: path, method: .delete, headers: headers, input: input)"
-    )
-
-    writer.writeln("}")
+    writer.writeln(f"}}")
 
 def _get_shared_interface(message: Message, prefix: str) -> SharedInterface:
     variables = []

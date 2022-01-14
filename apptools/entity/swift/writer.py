@@ -912,14 +912,9 @@ def _write_service_put(writer: IndentedWriter,
     )
 
     indented_writer = writer.indented(indent=2)
-    if parameters:
-        indented_writer.writeln(
-            f"static func update({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> Self {{"
-        )
-    else:
-        indented_writer.writeln(
-            f"static func update(_ {_variable_name(entity.name)}: {entity.name}) -> Self {{"
-        )
+    indented_writer.writeln(
+        f"static func update(_ {_variable_name(entity.name)}: {entity.name}) -> Self {{"
+    )
 
     method_writer = indented_writer.indented(indent=2)
     method_writer.writeln(".init(")
@@ -930,7 +925,7 @@ def _write_service_put(writer: IndentedWriter,
         method_writer.indented(indent=2).writeln(f"requestModifier: .multi(")
         method_writer.indented(indent=4).writeln(f".parameters([")
         for property in required_properties + optional_properties:
-            method_writer.indented(indent=6).writeln(f'"{property.name}": {_variable_name(property.name)},')
+            method_writer.indented(indent=6).writeln(f'"{property.name}": {_variable_name(entity.name)}.{_variable_name(property.name)},')
         method_writer.indented(indent=4).writeln(f"]),")
         method_writer.indented(indent=4).writeln(f".encode({_variable_name(entity.name)})")
         method_writer.indented(indent=2).writeln(f"),")
@@ -954,14 +949,9 @@ def _write_service_post(writer: IndentedWriter,
     )
 
     indented_writer = writer.indented(indent=2)
-    if parameters:
-        indented_writer.writeln(
-            f"static func insert({', '.join(parameters)}, {_variable_name(entity.name)}: {entity.name}) -> Self {{"
-        )
-    else:
-        indented_writer.writeln(
-            f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> Self {{"
-        )
+    indented_writer.writeln(
+        f"static func insert(_ {_variable_name(entity.name)}: {entity.name}) -> Self {{"
+    )
 
     method_writer = indented_writer.indented(indent=2)
     method_writer.writeln(".init(")
@@ -972,7 +962,7 @@ def _write_service_post(writer: IndentedWriter,
         method_writer.indented(indent=2).writeln(f"requestModifier: .multi(")
         method_writer.indented(indent=4).writeln(f".parameters([")
         for property in required_properties + optional_properties:
-            method_writer.indented(indent=6).writeln(f'"{property.name}": {_variable_name(property.name)},')
+            method_writer.indented(indent=6).writeln(f'"{property.name}": {_variable_name(entity.name)}.{_variable_name(property.name)},')
         method_writer.indented(indent=4).writeln(f"]),")
         method_writer.indented(indent=4).writeln(f".encode({_variable_name(entity.name)})")
         method_writer.indented(indent=2).writeln(f"),")

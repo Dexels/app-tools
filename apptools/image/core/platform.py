@@ -7,14 +7,13 @@ from apptools.image.core.target import Target
 
 class Platform(object):
     def __init__(self, name, path, scales, targets, attributes,
-                 is_default_platform, xcodeproj_path):
+                 is_default_platform):
         self.name = name
         self.path = expanduser(path)
         self.scales = scales
         self.targets = targets
         self.attributes = attributes
         self.is_default_platform = is_default_platform
-        self.xcodeproj_path = xcodeproj_path
 
     def is_android(self):
         return self.name.startswith("android")
@@ -38,8 +37,7 @@ class Platform(object):
             Target.load_from_json(target)
             for target in json_get('targets', json)
         ], json_get('attributes', json, False, []),
-                   json_get('is_default_platform', json, False, True),
-                   json_get('xcodeproj_path', json, False))
+                   json_get('is_default_platform', json, False, True))
 
     def get_target(self, name):
         for target in self.targets:

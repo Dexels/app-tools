@@ -21,8 +21,8 @@ class ImageDefinition(object):
         self.size = size
 
     def filename(self, imagename, extension=".png"):
-        return "%s-%sx%s@%sx%s" % (imagename, self.size.width,
-                                   self.size.height, self.scale, extension)
+        return "%s-%sx%s@%sx%s" % (imagename, self.size,
+                                   self.size, self.scale, extension)
 
 
 class Blueprint(object):
@@ -53,31 +53,31 @@ class Blueprint(object):
     @classmethod
     def make_appiconset_blueprint(cls):
         definitions = [
-            ImageDefinition(Idiom.IPHONE, 2, "20x20"),
-            ImageDefinition(Idiom.IPHONE, 3, "20x20"),
-            ImageDefinition(Idiom.IPHONE, 1, "29x29"),
-            ImageDefinition(Idiom.IPHONE, 2, "29x29"),
-            ImageDefinition(Idiom.IPHONE, 3, "29x29"),
-            ImageDefinition(Idiom.IPHONE, 2, "40x40"),
-            ImageDefinition(Idiom.IPHONE, 3, "40x40"),
-            ImageDefinition(Idiom.IPHONE, 1, "57x57"),
-            ImageDefinition(Idiom.IPHONE, 2, "57x57"),
-            ImageDefinition(Idiom.IPHONE, 2, "60x60"),
-            ImageDefinition(Idiom.IPHONE, 3, "60x60"),
-            ImageDefinition(Idiom.IPAD, 1, "20x20"),
-            ImageDefinition(Idiom.IPAD, 2, "20x20"),
-            ImageDefinition(Idiom.IPAD, 1, "29x29"),
-            ImageDefinition(Idiom.IPAD, 2, "29x29"),
-            ImageDefinition(Idiom.IPAD, 1, "40x40"),
-            ImageDefinition(Idiom.IPAD, 2, "40x40"),
-            ImageDefinition(Idiom.IPAD, 1, "50x50"),
-            ImageDefinition(Idiom.IPAD, 2, "50x50"),
-            ImageDefinition(Idiom.IPAD, 1, "72x72"),
-            ImageDefinition(Idiom.IPAD, 2, "72x72"),
-            ImageDefinition(Idiom.IPAD, 1, "76x76"),
-            ImageDefinition(Idiom.IPAD, 2, "76x76"),
-            ImageDefinition(Idiom.IPAD, 2, "83.5x83.5"),
-            ImageDefinition(Idiom.MARKETING, 1, "1024x1024")
+            ImageDefinition(Idiom.IPHONE, 2, "20"),
+            ImageDefinition(Idiom.IPHONE, 3, "20"),
+            ImageDefinition(Idiom.IPHONE, 1, "29"),
+            ImageDefinition(Idiom.IPHONE, 2, "29"),
+            ImageDefinition(Idiom.IPHONE, 3, "29"),
+            ImageDefinition(Idiom.IPHONE, 2, "40"),
+            ImageDefinition(Idiom.IPHONE, 3, "40"),
+            ImageDefinition(Idiom.IPHONE, 1, "57"),
+            ImageDefinition(Idiom.IPHONE, 2, "57"),
+            ImageDefinition(Idiom.IPHONE, 2, "60"),
+            ImageDefinition(Idiom.IPHONE, 3, "60"),
+            ImageDefinition(Idiom.IPAD, 1, "20"),
+            ImageDefinition(Idiom.IPAD, 2, "20"),
+            ImageDefinition(Idiom.IPAD, 1, "29"),
+            ImageDefinition(Idiom.IPAD, 2, "29"),
+            ImageDefinition(Idiom.IPAD, 1, "40"),
+            ImageDefinition(Idiom.IPAD, 2, "40"),
+            ImageDefinition(Idiom.IPAD, 1, "50"),
+            ImageDefinition(Idiom.IPAD, 2, "50"),
+            ImageDefinition(Idiom.IPAD, 1, "72"),
+            ImageDefinition(Idiom.IPAD, 2, "72"),
+            ImageDefinition(Idiom.IPAD, 1, "76"),
+            ImageDefinition(Idiom.IPAD, 2, "76"),
+            ImageDefinition(Idiom.IPAD, 2, "83.5"),
+            ImageDefinition(Idiom.MARKETING, 1, "1024")
         ]
 
         return cls(definitions)

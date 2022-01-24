@@ -187,7 +187,7 @@ class DistributeJob(object):
 
             contents['images'].append({
                 "size":
-                "%sx%s" % (definition.size.width, definition.size.height),
+                "%sx%s" % (definition.size, definition.size),
                 "idiom":
                 str(definition.idiom),
                 "filename":
@@ -196,8 +196,7 @@ class DistributeJob(object):
                 "%sx" % definition.scale
             })
 
-            svg2png(filecontent, definition.scale, destination_path,
-                    definition.size)
+            svg2png(filecontent, definition.scale, destination_path, f"{definition.size}x{definition.size}")
 
         contents_json_path = join(imageset_directory_path, 'Contents.json')
         self.save_ios_contents_json(contents_json_path, contents, indent=2)

@@ -108,7 +108,7 @@ def _write_service(writer: IndentedWriter, entity: Entity,
             parameters = ', '.join(parameter_list)
             if entity.version != -1:
                 indented_writer.writeln(
-                    f'@Headers("X-Navajo-Version: {entity.version}")')
+                    f'@Headers("X-Navajo-Entity-Version: {entity.version}")')
                 indented_writer.writeln(
                     f'@{method}("{entity.path}?v={entity.version}")')
             else:
@@ -132,7 +132,7 @@ def _write_service(writer: IndentedWriter, entity: Entity,
         if not len(entity.key_ids):
             if entity.version != -1:
                 indented_writer.writeln(
-                    f'@Headers("X-Navajo-Version: {entity.version}")')
+                    f'@Headers("X-Navajo-Entity-Version: {entity.version}")')
                 indented_writer.writeln(
                     f'@{method}("{entity.path}?v={entity.version}")')
             else:

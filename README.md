@@ -5,6 +5,8 @@ App-tools is a bundle of tools that are useful for writing client applications. 
 - app-strings
 
 ## Install/Update
+Install python3.9. This could be done with `brew install python@3.9` on the mac.
+
 ```bash
 python3 -m pip install .
 ```

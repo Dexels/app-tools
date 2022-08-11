@@ -995,10 +995,11 @@ def _write_service_delete(writer: IndentedWriter,
     method_writer.indented(indent=2).writeln(f"path: {entity.name}Service.path,")
     method_writer.indented(indent=2).writeln(f"method: .delete,")
     method_writer.indented(indent=2).writeln(f"headers: {entity.name}Service.headers,")
-    method_writer.indented(indent=2).writeln(f"requestModifier: .parameters([")
-    for property in required_properties + optional_properties:
-        method_writer.indented(indent=4).writeln(f'"{property.name}": {_variable_name(property.name)},')
-    method_writer.indented(indent=2).writeln(f"]),")
+    if parameters:
+        method_writer.indented(indent=2).writeln(f"requestModifier: .parameters([")
+        for property in required_properties + optional_properties:
+            method_writer.indented(indent=4).writeln(f'"{property.name}": {_variable_name(property.name)},')
+        method_writer.indented(indent=2).writeln(f"]),")
     method_writer.indented(indent=2).writeln(f"responseSerializer: .decodable(of: {entity.name}.self)")
     method_writer.writeln(")")
     indented_writer.writeln("}")

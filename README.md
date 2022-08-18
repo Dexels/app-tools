@@ -58,6 +58,18 @@ app-image\
 	-p "ios"
 ```
 
+### app_spec.json
+This file states which platform receives which images and in what scales. Both platform has different scales and different locations the images needs to be put. Most important is the `images` array.
+
+Possible keys:
+* The `basename` is a relative path in the shared directory to an actual image.
+* The `platforms` states which platform receives the images (eg ios/android).
+* The `targets` states which target will receive the image (eg ras, taronga).
+* The `size` is a string stating the size the lowest scale should be. For that point we scale up.
+
+#### Future
+The `placeholder_colormap` and the `themes` keys should no longer be used. For iOS and Android development you can now use tint colors to style an image to a different colorset. This needs to be removed from the app-image toolset.
+
 ## App strings
 A tool to generate and combine all the strings defined using json files that will be set in the correct place for Android and iOS.
 

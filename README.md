@@ -5,23 +5,23 @@ App-tools is a bundle of tools that are useful for writing client applications. 
 - app-strings
 
 ## Install/Update
-Install python3.9. This could be done with `brew install python@3.9` on the mac.
+The app-tools use python3.9. This needs to be installed, which could be done with `brew install python@3.9` on the Mac.
 
 ```bash
 python3 -m pip install .
 ```
-After any change run the command again to install that change. Also when changing branches run this command again. It is possible to install it with the `-e` flag to make it dynamic, but couldn't get this to work on a non-apple system.
+Any changes are only available for use after they have been installed using the previous command. Thus, if you change anything or change the branch, run this command again. It should be possible to install it with the `-e` flag to remove the need for re-running this command, but this has only worked on Stefan's system (Mac) for now.
 
 ## App entity
-App-entity is a tool to generate boiler plate client code for apps that use an entity based API. It supports multiple languages (writers) and new ones may be added. Depending on the target language, it will generate datamodel classes (objects), stubs for logic classes, and services to perform operations defined in the API.
+App-entity is a tool to generate boiler plate client code for apps that use an API based on Navajo Entities. It supports multiple client languages (writers) and new ones may be added. Depending on the target language, it will generate datamodel classes (objects), stubs for logic classes, and services to perform operations defined in the Entity API.
 
-When running multiple times it will always replace the Service and Datamodel classes. The logic will not be updated because it could contain app logic which we cannot recreate.
+When running multiple times it will always replace the Service and Datamodel classes. The logic will not be updated because it could contain hand-crafted app logic which we cannot recreate (eg "isPlayer" -> roleId field equals "PLAYER").
 
-The first argument should be which writer you wanna use. See app-entity -h for
+The first argument should be which writer you want to use. See app-entity -h for
 all possible writers.
 
 The tool displays all possible arguments when you run app-entity -h. Each
-writer can have different arguments. To check them out run app-entity swift -h.
+writer can have different arguments. To check them out run eg. app-entity swift -h.
 
 ### Examples
 The examples below show how the tool could be used:
@@ -51,7 +51,7 @@ In both languages we can extend classes without subclassing so we might get away
 Also Swift currently has automatic encoding and decoding build in the compile time. So we do not have to generate it anymore.
 
 ## App image
-A tool to generate all the required images from one source called the `app_spec.json`.
+A tool to generate all the required images from one source called the `app_spec.json`. The files referred to in this json need to exist relative to the json file.
 
 ```bash
 app-image\
@@ -60,7 +60,7 @@ app-image\
 ```
 
 ## App strings
-A tool to generate and combine all the strings using json files that will be set in the correct place for Android and iOS.
+A tool to generate and combine all the strings defined using json files that will be set in the correct place for Android and iOS.
 
 ```bash
 app-strings swift\
@@ -72,7 +72,9 @@ app-strings swift\
 	--target taronga
 ```
 
-The order in all the just files will be merged is:
+The order the files will be merged in is:
 - strings-{default}.json
 - strings-{language}.json
 - strings-{target}.json
+
+In other words, a definition in strings-{target}.json overrules one in strings-{language}.json and strings-{default}.json, and one in strings-{language}.json overrules the one in strings-{default}.json, if not specified in strings-{target}.json. 

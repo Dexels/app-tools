@@ -30,7 +30,6 @@ The examples below show how the tool could be used:
 app-entity swift \
     --input "$GIT"/sportlink/scripts/entity/common/memberportal/app \
     --output "$GIT"/sportlinked-app-ios/app/Sportlinked \
-    --xcodeproj "$GIT"/sportlinked-app-ios/app/sportlinked.xcodeproj
  ```
 
 ```bash 

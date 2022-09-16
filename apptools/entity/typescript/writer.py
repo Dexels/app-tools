@@ -12,15 +12,9 @@ from apptools.entity.text import camelcase, capitalize
 
 def write(entities: List[Entity], options: Dict[str, Any]) -> None:
     output = options["output"]
-    # Make sure to remove all previously generated files in correct folder
-    # remove_all(output)
 
     for entity in entities:
         _write_entity(entity, output)
-
-
-def remove_all(output: pathlib.Path) -> None:
-    shutil.rmtree(output)
 
 
 def _write_entity(entity: Entity, output: pathlib.Path) -> None:

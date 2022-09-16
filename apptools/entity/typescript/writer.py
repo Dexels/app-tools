@@ -67,10 +67,11 @@ def _write_datamodel(writer: IndentedWriter, entity: Entity,
                      output: pathlib.Path) -> None:
     dependency_statements: Set[str] = set()
 
-    dependencies = _dependencies(entity.root)
+    dependencies = _get_dependencies(entity)
     if dependencies:
         for dependency in dependencies:
-            name = dependency.root.name
+            print(dependency)
+            name = dependency.name
             path = _rel_import(entity.package, dependency.package, name)
             statement = f"import {{ {name} }} from '{str(path)}';"
 
@@ -98,16 +99,73 @@ def _rel_import(source: pathlib.Path, destination: pathlib.Path,
     return prefix + str(tmp_path) + "/" + name
 
 
-def _dependencies(message: Message) -> List[Entity]:
-    entities: List[Entity] = []
-    if message.extends is not None:
-        entities.append(message.extends)
+def _get_constructor_dependencies(entity: Entity):
+    dependencies = []
+    if len(entity.root.extends) == 1:
+        dependencies += _get_constructor_dependencies(entity.root.extends[0])
 
-    for sub_message in message.messages:
-        entities += _dependencies(sub_message)
+    for message in entity.root.messages:
+        if message.nullable:
+            continue
+        if len(message.extends) == 1:
+            if message.is_non_empty:
+                dependencies.append(entity)
+            else:
+                dependencies.append(message.extends[0])
+        elif len(message.extends) > 1:
+            shared_interface = _get_shared_interface(entity.root)
+            for parent in shared_interface.parents:
+                dependencies.add(parent)
+        else:
+            dependencies.append(entity)
+    return dependencies
 
-    return entities
+def _get_variable_dependencies(entity: Entity, root: Message, logic: bool = False):
+    dependencies = []
+    for message in root.messages:
+        if message.nullable and logic:
+            continue
 
+        if message.extends:
+            for extends in message.extends:
+                if message.is_non_empty:
+                    # we will have an inner class for this variable
+                    dependencies.append(extends)
+                    dependencies.append(entity)
+                else:
+                    dependencies.append(extends)
+                dependencies += _get_constructor_dependencies(extends)
+            if len(message.extends) > 1:
+                dependencies.append(entity)
+        else:
+            # we will have an inner class for this variable
+            if not logic:
+                dependencies.append(entity)
+        for submessage in message.messages:
+            if submessage.nullable and logic:
+                continue
+            if submessage.extends:
+                for extends in submessage.extends:
+                    dependencies.append(extends)
+                    if extends.name != submessage.name and submessage.is_non_empty:
+                        dependencies += _get_variable_dependencies(extends, extends.root, logic)
+                        dependencies += _get_variable_dependencies(extends, submessage, logic)
+                if len(submessage.extends) > 1:
+                    dependencies.append(entity)
+            else:
+                dependencies += _get_variable_dependencies(entity, submessage, logic)
+    return dependencies
+
+def _get_dependencies(entity: Entity, logic: bool = False):
+    dependencies = []
+    if entity.root.extends:
+        for extends in entity.root.extends:
+            dependencies.append(extends)
+            dependencies += _get_constructor_dependencies(extends)
+
+    dependencies += _get_variable_dependencies(entity, entity.root, logic)
+
+    return dependencies
 
 def _write_datamodel_class(writer: IndentedWriter,
                            message: Message,

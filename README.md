@@ -12,6 +12,13 @@ python3 -m pip install .
 ```
 Any changes are only available for use after they have been installed using the previous command. Thus, if you change anything or change the branch, run this command again. It should be possible to install it with the `-e` flag to remove the need for re-running this command, but this has only worked on Stefan's system (Mac) for now.
 
+After that use pip to make package commands available from command line:
+
+```
+pip3.9 install App-tools
+```
+(NOTE that pipX in this case is pip3.9, because this is how it's installed on my Mac)
+
 ## App entity
 App-entity is a tool to generate boiler plate client code for apps that use an API based on Navajo Entities. It supports multiple client languages (writers) and new ones may be added. Depending on the target language, it will generate datamodel classes (objects), stubs for logic classes, and services to perform operations defined in the Entity API.
 

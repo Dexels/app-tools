@@ -2,6 +2,7 @@ import os
 import pathlib
 import shutil
 
+from functools import reduce
 from typing import List, Dict, Any, Tuple, Set
 
 from apptools.entity.navajo import Entity, Message, Property
@@ -12,7 +13,7 @@ from apptools.entity.text import camelcase, capitalize
 def write(entities: List[Entity], options: Dict[str, Any]) -> None:
     output = options["output"]
     # Make sure to remove all previously generated files in correct folder
-    remove_all(output)
+    # remove_all(output)
 
     for entity in entities:
         _write_entity(entity, output)
@@ -171,8 +172,9 @@ def _write_datamodel_class(writer: IndentedWriter,
                            message: Message,
                            prefix: str = '') -> None:
     writer.write(f"export interface {message.name}")
-    if message.extends is not None:
-        writer.append(f" extends {message.extends.name}")
+    if message.extends:
+        extension = next(iter(message.extends or []), None)
+        writer.append(f" extends {extension.name}")
 
     variables: Set[str] = set()
 
@@ -202,16 +204,18 @@ def _write_datamodel_class(writer: IndentedWriter,
         type = sub_message.name
 
         if sub_message.is_array:
-            if sub_message.extends is None or len(sub_message.messages) or len(sub_message.properties):
+            if not sub_message.extends or len(sub_message.messages) or len(sub_message.properties):
                 interfaces.append(sub_message)
                 type = f"{name}[]"
             else:
-                type = f"{sub_message.extends.name}[]"
+                extension = next(iter(sub_message.extends or []), None)
+                type = f"{extension.name}[]"
         else:
-            if sub_message.extends is None or len(sub_message.messages) or len(sub_message.properties):
+            if not sub_message.extends or len(sub_message.messages) or len(sub_message.properties):
                 interfaces.append(sub_message)
             else:
-                type = sub_message.extends.name
+                extension = next(iter(sub_message.extends or []), None)
+                type = extension.name
 
         variable = name
         variable += f": {type}"

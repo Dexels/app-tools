@@ -19,6 +19,21 @@ pip3.9 install App-tools
 ```
 (NOTE that pipX in this case is pip3.9, because this is how it's installed on my Mac)
 
+Check that installation went well:
+```
+[app-tools * master] app-entity -h
+usage: app-entity [-h] {java,kotlin,swift,typescript} ...
+
+Transform entities to models in n programming languages
+
+positional arguments:
+  {java,kotlin,swift,typescript}
+                        Supported writers
+
+optional arguments:
+  -h, --help            show this help message and exit
+```
+
 ## App entity
 App-entity is a tool to generate boiler plate client code for apps that use an API based on Navajo Entities. It supports multiple client languages (writers) and new ones may be added. Depending on the target language, it will generate datamodel classes (objects), stubs for logic classes, and services to perform operations defined in the Entity API.
 

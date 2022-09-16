@@ -45,6 +45,8 @@ all possible writers.
 The tool displays all possible arguments when you run app-entity -h. Each
 writer can have different arguments. To check them out run eg. app-entity swift -h.
 
+The -o argument expects a folder to which the generates source are written. Folder entries that do not exist are created.
+
 ### Examples
 The examples below show how the tool could be used:
 
